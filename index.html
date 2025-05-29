@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Emotion Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="./css/style.css">
+</head>
+
+<body>
+    <div id="fadeOverlay"></div>
+    <div id="introOverlay">
+        <h1>Welcome to Jur Ass Itch Park</h1>
+        <p>Please enter your name so that you can begin the training program.</p>
+        <input id="nameField" type="text" placeholder="Enter your name" />
+        <button id="nameSubmit">Submit</button>
+    </div>
+
+    <div id="videoContainer">
+
+        <video id="videoElement" autoplay muted></video>
+        <canvas id="overlay"></canvas>
+
+    </div>
+
+    <div id="overFace">
+        <div id="lines"></div>
+        <div id="messages">Messages will go here</div>
+        <div id="tutorialOverlay" style="display:none;">
+            <button id="tutorialReadyBtn">READY</button>
+        </div>
+    </div>
+
+    <div id="readout">
+        <p>Target Emotion: <span id="targetEmotion">None</span></p>
+        <p>Match Percentage: <span id="matchPercentage">0%</span></p>
+        <p id="feedbackMessage"></p>
+    </div>
+
+    <div id="emotionData">
+        <!-- <h2>Emotions:</h2> -->
+        <ul id="emotionsList"></ul>
+
+        <button id="startGame">Start Game</button>
+    </div>
+
+    <script defer src="./js/face-api.js"></script>
+    <script src="./js/main.js"></script>
+</body>
+
+</html>
