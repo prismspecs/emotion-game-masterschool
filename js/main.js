@@ -323,11 +323,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const nameInput = document.getElementById('nameField');
         userName = nameInput.value.trim() || 'Guest';
         messages.textContent = 'Loading...'
-        introOverlay.style.display = 'none';;
-        setTimeout(() => {
+        introOverlay.style.display = 'none';
+        setTimeout(async () => {
             messages.textContent = '';
 
-            startVideo();
+            await startVideo(); // Ensure video setup is attempted before tutorial
             runTutorial();
         }, 2000);
         // document.getElementById('lines').textContent = `Welcome ${userName}`;
