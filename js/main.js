@@ -32,28 +32,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     const EMOTIONS = ['happy', 'sad', 'angry', 'neutral', 'surprised', 'disgusted', 'fearful'];
 
     let tutorialMessages = [
-        'Hello X',
-        '<span class="jurassic">Welcome to<br>Jur Ass Itch Park</span>',
-        'This will briefly explain how the game works before you play it',
-        'Move your phone so that your face is within the camera',
-        'Try to keep still for better detection',
-        'You will be given a line of dialogue and an emotional cue',
-        'Deliver the line while portraying that emotion with your face',
-        'The system will give you a grade at the end',
-        '        ',
-        'Okay, get ready...'
+        'Hello X', // Will be replaced by "Hello, [userName]"
+        'Welcome to the Emotion Game!',
+        'This game will test your ability to express emotions with your face.',
+        'Ensure your face is clearly visible in the camera view.',
+        'Try to match the target emotion shown on screen.',
+        'Hold the expression for a moment to register.',
+        'Good luck and have fun!',
+        'Get ready...'
     ];
-    // tutorialMessages = [
-    //     "test"
-    // ];
 
     let endMessages = [
         'Thank you for playing!',
-        'You are now ready for your role in...',
-        '<span class="jurassic">Jur Ass Itch Park</span>'
+        'You have completed the Emotion Game!'
     ];
 
     const durationPerCharacter = 150;
+    let currentTutorialIndex = 0;
+    let tutorialTimeoutId = null; // To store the timeout ID for skipping
 
     let userName = '';
 
@@ -63,9 +59,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // load lines from lines.json
     // const response = await fetch('/lines.json');
     // const lines = await response.json();
-    const lines = [
-        {
-            "character": "Willy",
+    // const lines = [
+    //     {
+    //         "character": "Willy",
             "line": "It's all right. I came back."
         },
         {
@@ -84,7 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             "character": "Willy",
             "line": "I said nothing happened. Didn’t you hear me?"
         }
-    ];
+    // ];
 
     // Pre-create emotion list items and sliders
     const emotionElements = {};
@@ -350,11 +346,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         function showNextEndMessage() {
             messages.style.opacity = '0';
             setTimeout(() => {
-                messages.innerHTML = endMessages[index];
+                if (index >= endMessages.length) return; // All messages shown
+                const currentMessage = endMessages[index];
+                messages.innerHTML = currentMessage;
                 messages.style.opacity = '1';
                 index++;
                 if (index < endMessages.length) {
-                    setTimeout(showNextEndMessage, endMessages[index].length * durationPerCharacter);
+                    setTimeout(showNextEndMessage, currentMessage.length * durationPerCharacter);
                 } else {
                     // Fade the screen to black after the last message
                     setTimeout(() => {
@@ -371,17 +369,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function runTutorial() {
         GAME_MODE = "tutorial";
-
-        let index = 0;
+        currentTutorialIndex = 0; // Reset index for skippable tutorial
 
         function showNextMessage() {
             messages.style.opacity = '0';
+            
+            // Clear any existing timeout if we're advancing manually (e.g., by skipping)
+            if (tutorialTimeoutId) {
+                clearTimeout(tutorialTimeoutId);
+                tutorialTimeoutId = null;
+            }
+
             setTimeout(() => {
-                messages.innerHTML = tutorialMessages[index];
+                if (currentTutorialIndex >= tutorialMessages.length) return; // All messages shown
+
+                const currentMessage = tutorialMessages[currentTutorialIndex];
+                messages.innerHTML = currentMessage;
                 messages.style.opacity = '1';
-                index++;
-                if (index < tutorialMessages.length) {
-                    setTimeout(showNextMessage, tutorialMessages[index].length * durationPerCharacter);
+                currentTutorialIndex++;
+
+                if (currentTutorialIndex < tutorialMessages.length) {
+                    tutorialTimeoutId = setTimeout(showNextMessage, currentMessage.length * durationPerCharacter);
                 } else {
                     // Make tutorialOverlay a child of messages
                     const tutorialOverlay = document.getElementById('tutorialOverlay');
@@ -534,6 +542,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('overFace').style.pointerEvents = 'none';
 
         runGame();
+    });
+
+    // Event listener for skipping tutorial lines
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 's' || event.key === 'S') {
+            if (GAME_MODE === "tutorial" && currentTutorialIndex < tutorialMessages.length) {
+                // Advance to the next message immediately
+                showNextMessage();
+            } else if (GAME_MODE === "tutorial" && currentTutorialIndex >= tutorialMessages.length) {
+                // If at the last message, simulate "READY" button click
+                document.getElementById('tutorialReadyBtn').click();
+            }
+        }
     });
 
     if (bypassIntro) {
