@@ -114,36 +114,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     // startVideo(); // Remove or comment out this line
 
     async function startVideo() {
+        console.log("Entering startVideo function");
         try {
+            console.log("Enumerating devices...");
             const devices = await navigator.mediaDevices.enumerateDevices();
+            console.log("Devices enumerated:", devices);
             const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            console.log("Video devices found:", videoDevices);
 
             if (videoDevices.length === 0) {
+                console.error('No video input devices found');
                 throw new Error('No video input devices found');
             }
 
             // flip overlay and videoElement horizontally
             video.style.transform = 'scaleX(-1)';
             overlay.style.transform = 'scaleX(-1)';
+            console.log("Video and overlay flipped horizontally");
 
             const constraints = {
                 video: {
-                    facingMode: 'user',
+                    facingMode: 'user', // prefer front camera
                     aspectRatio: { ideal: 16 / 9 }
                 }
             };
-
+            console.log("Requesting user media with constraints:", constraints);
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            console.log("Got stream:", stream);
             video.srcObject = stream;
+            console.log("Video source object set");
 
             // Wait for the video metadata to be loaded
             video.onloadedmetadata = () => {
-                console.log(`Camera resolution: ${video.videoWidth}x${video.videoHeight}`);
+                console.log(`Video metadata loaded. Camera resolution: ${video.videoWidth}x${video.videoHeight}`);
             };
+            // Add an error handler for the video element itself
+            video.onerror = (e) => {
+                console.error("Video element error:", e);
+                alert("Error playing video stream. Please check camera permissions and hardware.");
+            };
+
         } catch (err) {
-            console.error('Error accessing webcam:', err);
-            alert('Could not access webcam. Please allow webcam access and refresh the page.');
+            console.error('Error in startVideo:', err);
+            // alert('Could not access webcam. Please allow webcam access and refresh the page. Details in console.');
+            // Re-throw the error if we want the nameSubmit catch block to also handle it
+            throw err; 
         }
+        console.log("Exiting startVideo function");
     }
 
     // event listener for resizing window
@@ -320,15 +337,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
     document.getElementById('nameSubmit').addEventListener('click', () => {
+        console.log("nameSubmit clicked"); // Step 1
         const nameInput = document.getElementById('nameField');
         userName = nameInput.value.trim() || 'Guest';
         messages.textContent = 'Loading...'
-        introOverlay.style.display = 'none';
-        setTimeout(async () => {
-            messages.textContent = '';
+        introOverlay.style.display = 'none'; // Extra semicolon was already removed, confirmed.
+        console.log("Hiding introOverlay:", introOverlay); // Step 2
 
-            await startVideo(); // Ensure video setup is attempted before tutorial
-            runTutorial();
+        setTimeout(async () => {
+            try { // Step 6
+                messages.textContent = '';
+                console.log("setTimeout: Attempting to start video..."); // Step 4
+                await startVideo();
+                console.log("setTimeout: Video started (or attempted)"); // Step 4
+                console.log("setTimeout: Attempting to run tutorial..."); // Step 5
+                runTutorial();
+                console.log("setTimeout: Tutorial run (or attempted)"); // Step 5
+            } catch (error) {
+                console.error("Error in nameSubmit setTimeout:", error); // Step 6
+                messages.textContent = 'Error during startup. Please check console.'; // Step 6
+            }
         }, 2000);
         // document.getElementById('lines').textContent = `Welcome ${userName}`;
         // replace the first tutorialMessage with Welcome, User
