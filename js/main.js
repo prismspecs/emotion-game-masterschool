@@ -56,32 +56,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     let bypassIntro = false;
     let GAME_MODE = "tutorial";
 
-    // load lines from lines.json
-    // const response = await fetch('/lines.json');
-    // const lines = await response.json();
-    // const lines = [
-    //     {
-    //         "character": "Willy",
-            "line": "It's all right. I came back."
-        },
-        {
-            "character": "Linda",
-            "line": "Why? What happened? Did something happen, Willy?"
-        },
-        {
-            "character": "Willy",
-            "line": "No, nothing happened."
-        },
-        {
-            "character": "Linda",
-            "line": "You didn’t smash the car, did you?"
-        },
-        {
-            "character": "Willy",
-            "line": "I said nothing happened. Didn’t you hear me?"
-        }
-    // ];
-
     // Pre-create emotion list items and sliders
     const emotionElements = {};
     EMOTIONS.forEach(emotion => {
@@ -158,7 +132,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.error('Error in startVideo:', err);
             // alert('Could not access webcam. Please allow webcam access and refresh the page. Details in console.');
             // Re-throw the error if we want the nameSubmit catch block to also handle it
-            throw err; 
+            throw err;
         }
         console.log("Exiting startVideo function");
     }
@@ -401,7 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         function showNextMessage() {
             messages.style.opacity = '0';
-            
+
             // Clear any existing timeout if we're advancing manually (e.g., by skipping)
             if (tutorialTimeoutId) {
                 clearTimeout(tutorialTimeoutId);
