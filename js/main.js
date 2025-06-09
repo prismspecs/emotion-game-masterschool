@@ -1,4 +1,43 @@
 document.addEventListener('DOMContentLoaded', async () => {
+    const introHeader = document.querySelector('#introOverlay h1');
+
+    async function getOpenAIGreeting() {
+        const prompt = "Write a short, fun, one-sentence greeting for a user about to play a game where they act out emotions for a computer to guess. Be creative and encouraging, and don't use quotes.";
+        
+        try {
+            const response = await fetch('http://localhost:3000/api/openai', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ prompt })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('API Error:', errorData);
+                throw new Error(`API request failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            const greeting = data.choices[0].message.content.trim();
+            
+            if (introHeader) {
+                introHeader.textContent = greeting;
+            } else {
+                alert(greeting); // Fallback to alert if the element isn't found
+            }
+
+        } catch (error) {
+            console.error('Failed to fetch greeting:', error);
+            if (introHeader) {
+                introHeader.textContent = 'Welcome to the Emotion Game!'; // Fallback message
+            }
+        }
+    }
+
+    getOpenAIGreeting();
+
     const videoContainer = document.getElementById('videoContainer');
     const video = document.getElementById('videoElement');
     const overlay = document.getElementById('overlay');
@@ -337,6 +376,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         tutorialMessages[0] = `Hello, ${userName}`;
     });
 
+    // Moved showNextMessage function to be accessible by both runTutorial and the keydown listener
+    function showNextMessage() {
+        messages.style.opacity = '0';
+
+        // Clear any existing timeout if we're advancing manually (e.g., by skipping)
+        if (tutorialTimeoutId) {
+            clearTimeout(tutorialTimeoutId);
+            tutorialTimeoutId = null;
+        }
+
+        setTimeout(() => {
+            if (currentTutorialIndex >= tutorialMessages.length) return; // All messages shown
+
+            const currentMessage = tutorialMessages[currentTutorialIndex];
+            messages.innerHTML = currentMessage;
+            messages.style.opacity = '1';
+            currentTutorialIndex++;
+
+            if (currentTutorialIndex < tutorialMessages.length) {
+                tutorialTimeoutId = setTimeout(showNextMessage, currentMessage.length * durationPerCharacter);
+            } else {
+                // Make tutorialOverlay a child of messages
+                const tutorialOverlay = document.getElementById('tutorialOverlay');
+                messages.appendChild(tutorialOverlay);
+                tutorialOverlay.style.display = 'block';
+                // allow pointer events on overFace
+                tutorialOverlay.style.pointerEvents = 'auto';
+
+                // Switch to game mode and select a new target emotion
+                // GAME_MODE = "game";
+                // selectNewTargetEmotion();
+            }
+        }, 1000);
+    }
+
     function runEnd() {
         // hide #readout
         readout.style.display = 'none';
@@ -372,43 +446,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function runTutorial() {
         GAME_MODE = "tutorial";
         currentTutorialIndex = 0; // Reset index for skippable tutorial
-
-        function showNextMessage() {
-            messages.style.opacity = '0';
-
-            // Clear any existing timeout if we're advancing manually (e.g., by skipping)
-            if (tutorialTimeoutId) {
-                clearTimeout(tutorialTimeoutId);
-                tutorialTimeoutId = null;
-            }
-
-            setTimeout(() => {
-                if (currentTutorialIndex >= tutorialMessages.length) return; // All messages shown
-
-                const currentMessage = tutorialMessages[currentTutorialIndex];
-                messages.innerHTML = currentMessage;
-                messages.style.opacity = '1';
-                currentTutorialIndex++;
-
-                if (currentTutorialIndex < tutorialMessages.length) {
-                    tutorialTimeoutId = setTimeout(showNextMessage, currentMessage.length * durationPerCharacter);
-                } else {
-                    // Make tutorialOverlay a child of messages
-                    const tutorialOverlay = document.getElementById('tutorialOverlay');
-                    messages.appendChild(tutorialOverlay);
-                    tutorialOverlay.style.display = 'block';
-                    // allow pointer events on overFace
-                    tutorialOverlay.style.pointerEvents = 'auto';
-
-
-
-                    // Switch to game mode and select a new target emotion
-                    // GAME_MODE = "game";
-                    // selectNewTargetEmotion();
-                }
-            }, 1000);
-        }
-        showNextMessage();
+        showNextMessage(); // Now calls the globally (within DOMContentLoaded) defined showNextMessage
     }
 
     function runGame() {
