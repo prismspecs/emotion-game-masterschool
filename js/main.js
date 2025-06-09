@@ -1,8 +1,51 @@
+// --- Speech Synthesis Setup ---
+let voices = [];
+
+function populateVoiceList() {
+    if (typeof speechSynthesis === 'undefined') {
+        return;
+    }
+    voices = speechSynthesis.getVoices();
+}
+
+populateVoiceList();
+if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = populateVoiceList;
+}
+
+function speakText(text) {
+    if (typeof speechSynthesis === 'undefined') {
+        console.error('Speech synthesis not supported');
+        return;
+    }
+
+    speechSynthesis.cancel(); // Cancel any previous speech
+
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    // Voice selection logic
+    const selectedVoice = voices.find(voice => voice.name === 'Google US English') ||
+                          voices.find(voice => voice.name === 'Microsoft David Desktop - English (United States)') ||
+                          voices.find(voice => voice.name === 'Alex') ||
+                          voices.find(voice => voice.lang === 'en-US');
+
+    if (selectedVoice) {
+        utterance.voice = selectedVoice;
+    }
+
+    utterance.pitch = 0.5; // Lower pitch
+    utterance.rate = 0.9;  // Slightly slower rate
+    utterance.volume = 1;  // Max volume
+
+    speechSynthesis.speak(utterance);
+}
+// --- End Speech Synthesis Setup ---
+
 document.addEventListener('DOMContentLoaded', async () => {
     const introHeader = document.querySelector('#introOverlay h1');
 
-    async function getOpenAIGreeting() {
-        const prompt = "Introduce yourself and the game. You are the game master.";
+    async function getOpenAIGreeting(userName) {
+        const prompt = `Your new player's name is ${userName}. Introduce yourself and the game. You are the game master. Address the player by name.`;
         
         try {
             const response = await fetch('http://localhost:3000/api/openai', {
@@ -20,23 +63,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const data = await response.json();
-            const greeting = data.choices[0].message.content.trim();
+            return data.choices[0].message.content.trim();
             
-            if (introHeader) {
-                introHeader.textContent = greeting;
-            } else {
-                alert(greeting); // Fallback to alert if the element isn't found
-            }
-
         } catch (error) {
             console.error('Failed to fetch greeting:', error);
-            if (introHeader) {
-                introHeader.textContent = 'Welcome to the Emotion Game!'; // Fallback message
-            }
+            return 'Welcome to the Emotion Game!'; // Fallback message
         }
     }
-
-    getOpenAIGreeting();
 
     const videoContainer = document.getElementById('videoContainer');
     const video = document.getElementById('videoElement');
@@ -226,14 +259,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, detectionInterval);
     }
 
-    function drawDetectionsWithoutScore(canvas, detections) {
-        const ctx = canvas.getContext('2d');
-        ctx.strokeStyle = 'yellow';
-        ctx.lineWidth = 2;
-
+    function drawDetections(context, detections) {
+        context.strokeStyle = 'yellow';
+        context.lineWidth = 2;
         detections.forEach(detection => {
             const box = detection.detection.box;
-            ctx.strokeRect(box.x, box.y, box.width, box.height);
+            context.strokeRect(box.x, box.y, box.width, box.height);
         });
     }
 
@@ -242,20 +273,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         canvasContext.clearRect(0, 0, overlay.width, overlay.height);
 
         if (currentResizedDetections && currentResizedDetections.length > 0) {
-            // adjust the drawing coordinates based on the overlay's offset
-            currentResizedDetections.forEach(detection => {
-                detection.detection.box.x += overlayOffsetX;
-                detection.detection.box.y += overlayOffsetY;
-                detection.landmarks.positions.forEach(position => {
-                    position.x += overlayOffsetX;
-                    position.y += overlayOffsetY;
-                });
-            });
-
-            // Draw the detection box without the score
-            drawDetectionsWithoutScore(overlay, currentResizedDetections);
+            // The resized detections are already in the overlay's coordinate system.
+            // No translation is needed for drawing on the canvas.
+            drawDetections(canvasContext, currentResizedDetections);
             faceapi.draw.drawFaceLandmarks(overlay, currentResizedDetections);
-
+            
             // position the readout div on top of face, centered
             const facebox = currentResizedDetections[0].detection.box;
 
@@ -349,13 +371,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('nameSubmit').click();
         }
     });
-    document.getElementById('nameSubmit').addEventListener('click', () => {
+    document.getElementById('nameSubmit').addEventListener('click', async () => {
+        // Prime the audio context on user interaction
+        speechSynthesis.cancel(); // Clear any pending utterances
+        const primer = new SpeechSynthesisUtterance(' ');
+        primer.volume = 0;
+        speechSynthesis.speak(primer);
+
+
         console.log("nameSubmit clicked"); // Step 1
         const nameInput = document.getElementById('nameField');
         userName = nameInput.value.trim() || 'Guest';
         messages.textContent = 'Loading...'
         introOverlay.style.display = 'none'; // Extra semicolon was already removed, confirmed.
         console.log("Hiding introOverlay:", introOverlay); // Step 2
+
+        const greeting = await getOpenAIGreeting(userName);
+        speakText(greeting);
 
         setTimeout(async () => {
             try { // Step 6
