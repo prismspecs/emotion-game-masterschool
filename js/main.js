@@ -13,15 +13,30 @@ if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !=
     speechSynthesis.onvoiceschanged = populateVoiceList;
 }
 
-function speakText(text) {
+function speakText(text, onEndCallback) {
+    const messagesEl = document.getElementById('messages');
+    if (messagesEl) {
+        messagesEl.textContent = text;
+    }
+
     if (typeof speechSynthesis === 'undefined') {
         console.error('Speech synthesis not supported');
+        if (onEndCallback) onEndCallback();
         return;
     }
 
     speechSynthesis.cancel(); // Cancel any previous speech
 
     const utterance = new SpeechSynthesisUtterance(text);
+
+    utterance.onend = () => {
+        if (onEndCallback) onEndCallback();
+    };
+
+    utterance.onerror = (event) => {
+        console.error('SpeechSynthesisUtterance error', event);
+        if (onEndCallback) onEndCallback(); // Ensure we don't block the game flow
+    };
 
     // Voice selection logic
     const selectedVoice = voices.find(voice => voice.name === 'Google US English') ||
@@ -44,16 +59,19 @@ function speakText(text) {
 document.addEventListener('DOMContentLoaded', async () => {
     const introHeader = document.querySelector('#introOverlay h1');
 
-    async function getOpenAIGreeting(userName) {
-        const prompt = `Your new player's name is ${userName}. Introduce yourself and the game. You are the game master. Address the player by name.`;
-        
+    async function getOpenAIResponse(prompt, maxTokens) {
         try {
+            const body = { prompt };
+            if (maxTokens) {
+                body.max_tokens = maxTokens;
+            }
+
             const response = await fetch('http://localhost:3000/api/openai', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ prompt })
+                body: JSON.stringify(body)
             });
 
             if (!response.ok) {
@@ -64,11 +82,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const data = await response.json();
             return data.choices[0].message.content.trim();
-            
         } catch (error) {
-            console.error('Failed to fetch greeting:', error);
-            return 'Welcome to the Emotion Game!'; // Fallback message
+            console.error('Failed to fetch OpenAI response:', error);
+            return null; // Return null on error
         }
+    }
+
+    async function getOpenAIGreeting(userName) {
+        const prompt = `Your new player's name is ${userName}. As the game master, welcome them to the Emotion Game with a short and exciting greeting. Address them by name and keep it under 25 words.`;
+        const greeting = await getOpenAIResponse(prompt, 40);
+        return greeting || 'Welcome to the Emotion Game!'; // Fallback message
     }
 
     const videoContainer = document.getElementById('videoContainer');
@@ -387,22 +410,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log("Hiding introOverlay:", introOverlay); // Step 2
 
         const greeting = await getOpenAIGreeting(userName);
-        speakText(greeting);
 
-        setTimeout(async () => {
+        speakText(greeting, async () => {
             try { // Step 6
                 messages.textContent = '';
-                console.log("setTimeout: Attempting to start video..."); // Step 4
+                console.log("Greeting finished: Attempting to start video..."); // Step 4
                 await startVideo();
-                console.log("setTimeout: Video started (or attempted)"); // Step 4
-                console.log("setTimeout: Attempting to run tutorial..."); // Step 5
+                console.log("Greeting finished: Video started (or attempted)"); // Step 4
+                console.log("Greeting finished: Attempting to run tutorial..."); // Step 5
                 runTutorial();
-                console.log("setTimeout: Tutorial run (or attempted)"); // Step 5
+                console.log("Greeting finished: Tutorial run (or attempted)"); // Step 5
             } catch (error) {
                 console.error("Error in nameSubmit setTimeout:", error); // Step 6
                 messages.textContent = 'Error during startup. Please check console.'; // Step 6
             }
-        }, 2000);
+        });
+
         // document.getElementById('lines').textContent = `Welcome ${userName}`;
         // replace the first tutorialMessage with Welcome, User
         tutorialMessages[0] = `Hello, ${userName}`;
