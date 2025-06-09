@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import fetch from 'node-fetch';
+import fs from 'fs/promises';
+import path from 'path';
 
 dotenv.config();
 
@@ -11,9 +13,29 @@ const port = 3000;
 app.use(cors());
 app.use(express.json());
 
+let personaPrompt = '';
+
+async function loadPersona() {
+  try {
+    const personaPath = path.resolve(process.cwd(), 'config/prompt-engineering.json');
+    const data = await fs.readFile(personaPath, 'utf-8');
+    const personas = JSON.parse(data);
+    if (personas.personas && personas.personas.length > 0) {
+      personaPrompt = personas.personas[0].prompt;
+      console.log('Persona loaded successfully.');
+    } else {
+      console.log('No personas found in config file.');
+    }
+  } catch (error) {
+    console.error('Failed to load persona:', error);
+  }
+}
+
 app.post('/api/openai', async (req, res) => {
     const { prompt } = req.body;
     
+    const fullPrompt = `${personaPrompt}\n\n${prompt}`;
+
     try {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -23,7 +45,7 @@ app.post('/api/openai', async (req, res) => {
             },
             body: JSON.stringify({
                 model: 'gpt-4o-mini',
-                messages: [{ role: 'user', content: prompt }],
+                messages: [{ role: 'user', content: fullPrompt }],
                 max_tokens: 50,
                 temperature: 0.8
             })
@@ -44,6 +66,11 @@ app.post('/api/openai', async (req, res) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`Server listening at http://localhost:${port}`);
-}); 
+async function startServer() {
+    await loadPersona();
+    app.listen(port, () => {
+        console.log(`Server listening at http://localhost:${port}`);
+    });
+}
+
+startServer(); 

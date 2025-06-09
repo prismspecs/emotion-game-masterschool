@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const introHeader = document.querySelector('#introOverlay h1');
 
     async function getOpenAIGreeting() {
-        const prompt = "Write a short, fun, one-sentence greeting for a user about to play a game where they act out emotions for a computer to guess. Be creative and encouraging, and don't use quotes.";
+        const prompt = "Introduce yourself and the game. You are the game master.";
         
         try {
             const response = await fetch('http://localhost:3000/api/openai', {
