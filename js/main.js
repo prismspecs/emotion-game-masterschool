@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const video = document.getElementById('videoElement');
     const overlay = document.getElementById('overlay');
     const canvasContext = overlay.getContext('2d');
+    console.log('Canvas context created:', canvasContext ? 'SUCCESS' : 'FAILED');
     const emotionsList = document.getElementById('emotionsList');
     const readout = document.getElementById('readout');
 
@@ -64,8 +65,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let targetEmotion = null;
     let lastDetections = [];
-    let previousResizedDetections = [];
-    let prevRect;
     let currentResizedDetections = [];
     let targetEmotionSelected = false;
 
@@ -76,19 +75,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const REQUIRED_HOLD_TIME = 800          // time they must hold emotion (ms)
     const EMOTION_THRESHOLD = 70            // 80% match required
 
-    const detectionInterval = 200; // ms
+    const DETECTION_INTERVAL = 200; // ms
 
     const EMOTIONS = ['happy', 'sad', 'angry', 'neutral', 'surprised', 'disgusted', 'fearful'];
 
     let tutorialMessages = [
-        'Hello X', // Will be replaced by "Hello, [userName]"
-        'Welcome to the Emotion Game!',
-        'This game will test your ability to express emotions with your face.',
-        'Ensure your face is clearly visible in the camera view.',
-        'Try to match the target emotion shown on screen.',
-        'Hold the expression for a moment to register.',
-        'Good luck and have fun!',
-        'Get ready...'
+        'Let me explain how this works.',
+        'You will be asked to express specific emotions with your face.',
+        'Make sure your face is clearly visible in the camera.',
+        'When you see a target emotion, try to match it with your expression.',
+        'Hold the expression steady until it registers.',
+        'Ready to begin?'
     ];
 
     let endMessages = [
@@ -165,81 +162,105 @@ document.addEventListener('DOMContentLoaded', async () => {
             video.srcObject = stream;
             console.log("Video source object set");
 
-            // Wait for the video metadata to be loaded
-            video.onloadedmetadata = () => {
-                console.log(`Video metadata loaded. Camera resolution: ${video.videoWidth}x${video.videoHeight}`);
-            };
-            // Add an error handler for the video element itself
-            video.onerror = (e) => {
-                console.error("Video element error:", e);
-                alert("Error playing video stream. Please check camera permissions and hardware.");
-            };
+            // Return a promise that resolves when video is ready
+            return new Promise((resolve, reject) => {
+                video.onloadedmetadata = () => {
+                    console.log(`Video metadata loaded. Camera resolution: ${video.videoWidth}x${video.videoHeight}`);
+                    
+                    resizeOverlayToVideo();
+                    console.log('Overlay resized. Overlay dimensions:', overlay.width, 'x', overlay.height);
+                    
+                    // get the overlay's offset
+                    const overlayRect = overlay.getBoundingClientRect();
+                    overlayOffsetX = overlayRect.left;
+                    overlayOffsetY = overlayRect.top;
+                    console.log('Overlay offset:', overlayOffsetX, overlayOffsetY);
+
+                    // start detection loop immediately
+                    startDetectionLoop();
+
+                    // start animation loop immediately
+                    requestAnimationFrame(animate);
+                    console.log('Face detection and animation started immediately');
+                    
+                    resolve();
+                };
+                
+                video.onerror = (e) => {
+                    console.error("Video element error:", e);
+                    reject(e);
+                };
+            });
 
         } catch (err) {
             console.error('Error in startVideo:', err);
-            // alert('Could not access webcam. Please allow webcam access and refresh the page. Details in console.');
-            // Re-throw the error if we want the nameSubmit catch block to also handle it
             throw err;
         }
-        console.log("Exiting startVideo function");
+    }
+
+    function resizeOverlayToVideo() {
+        // Get container size
+        const containerWidth = videoContainer.clientWidth;
+        const containerHeight = videoContainer.clientHeight;
+        // Get video intrinsic size
+        const videoAspect = video.videoWidth / video.videoHeight;
+        const containerAspect = containerWidth / containerHeight;
+        let displayWidth, displayHeight, offsetX, offsetY;
+        if (videoAspect > containerAspect) {
+            // Video is wider than container: height matches, width overflows
+            displayHeight = containerHeight;
+            displayWidth = containerHeight * videoAspect;
+            offsetX = (containerWidth - displayWidth) / 2;
+            offsetY = 0;
+        } else {
+            // Video is taller than container: width matches, height overflows
+            displayWidth = containerWidth;
+            displayHeight = containerWidth / videoAspect;
+            offsetX = 0;
+            offsetY = (containerHeight - displayHeight) / 2;
+        }
+        // Set overlay size and position
+        overlay.width = displayWidth;
+        overlay.height = displayHeight;
+        overlay.style.width = displayWidth + 'px';
+        overlay.style.height = displayHeight + 'px';
+        overlay.style.left = offsetX + 'px';
+        overlay.style.top = offsetY + 'px';
+        overlay.style.position = 'absolute';
+        faceapi.matchDimensions(overlay, { width: displayWidth, height: displayHeight });
     }
 
     // event listener for resizing window
     window.addEventListener('resize', () => {
+        resizeOverlayToVideo();
         // get the overlay's offset
         const overlayRect = overlay.getBoundingClientRect();
         overlayOffsetX = overlayRect.left;
         overlayOffsetY = overlayRect.top;
     });
 
-    video.addEventListener('loadedmetadata', () => {
-
-        // set videoContainer size to video size
-        videoContainer.style.width = `${video.videoWidth}px`;
-        videoContainer.style.height = `${video.videoHeight}px`;
-
-        const rect = video.getBoundingClientRect();
-        const displaySize = { width: rect.width, height: rect.height };
-
-        // get the overlay's offset
-        const overlayRect = overlay.getBoundingClientRect();
-        overlayOffsetX = overlayRect.left;
-        overlayOffsetY = overlayRect.top;
-
-        faceapi.matchDimensions(overlay, displaySize);
-
-        // start detection loop separately
-        startDetectionLoop(displaySize);
-
-        // start animation loop
-        requestAnimationFrame(animate);
-    });
-
-    function startDetectionLoop(displaySize) {
+    function startDetectionLoop() {
         const detectionOptions = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 });
-
         setInterval(async () => {
             const detections = await faceapi.detectAllFaces(video, detectionOptions)
                 .withFaceLandmarks()
                 .withFaceExpressions();
-
             if (detections.length > 0) {
                 lastDetections = detections;
             }
-
-            // store resized detections to be used by the animation loop
-            currentResizedDetections = faceapi.resizeResults(lastDetections, displaySize);
-
-            // requestAnimationFrame(animate);
-        }, detectionInterval);
+            // Use overlay's current size for resizing
+            currentResizedDetections = faceapi.resizeResults(lastDetections, { width: overlay.width, height: overlay.height });
+        }, DETECTION_INTERVAL);
     }
 
-    function drawDetections(context, detections) {
-        context.strokeStyle = 'yellow';
-        context.lineWidth = 2;
+    function drawDetectionsWithoutScore(canvas, detections) {
+        const ctx = canvas.getContext('2d');
+        ctx.strokeStyle = 'yellow';
+        ctx.lineWidth = 3;
+
         detections.forEach(detection => {
             const box = detection.detection.box;
-            context.strokeRect(box.x, box.y, box.width, box.height);
+            ctx.strokeRect(box.x, box.y, box.width, box.height);
         });
     }
 
@@ -248,20 +269,50 @@ document.addEventListener('DOMContentLoaded', async () => {
         canvasContext.clearRect(0, 0, overlay.width, overlay.height);
 
         if (currentResizedDetections && currentResizedDetections.length > 0) {
-            // The resized detections are already in the overlay's coordinate system.
-            // No translation is needed for drawing on the canvas.
-            drawDetections(canvasContext, currentResizedDetections);
-            faceapi.draw.drawFaceLandmarks(overlay, currentResizedDetections);
-            
+            // **DO NOT** modify currentResizedDetections with screen offsets here.
+            // Detections are already relative to the overlay canvas dimensions.
+
+            // Draw the detection box without the score
+            drawDetectionsWithoutScore(overlay, currentResizedDetections);
+
+            const faceLandmarksConfig = {
+                drawPoints: false,
+                pointSize: 2,
+                pointColor: '#fff',
+                drawLines: true,
+                lineColor: '#fff',
+                lineWidth: 2
+            };
+
+            faceapi.draw.drawFaceLandmarks(overlay, currentResizedDetections, faceLandmarksConfig);
+
             // position the readout div on top of face, centered
             const facebox = currentResizedDetections[0].detection.box;
 
-            // for mirrored video
-            readout.style.left = `${overlay.offsetWidth - (facebox.x + facebox.width / 2 + readout.offsetWidth / 2) + overlayOffsetX}px`;
-            readout.style.top = `${facebox.y + facebox.height + overlayOffsetY}px`;
+            // Get the overlay's calculated offset (from resizeOverlayToVideo)
+            const overlayScreenX = parseFloat(overlay.style.left) || 0;
+            const overlayScreenY = parseFloat(overlay.style.top) || 0;
+
+            // Position readout relative to the screen, considering mirrored video and overlay
+            // The overlay (and video) is mirrored with transform: scaleX(-1)
+            // The readout needs to be positioned based on the *visual* position of the facebox on screen.
+            // facebox.x is from the left of the overlay canvas.
+            // In a mirrored view, if overlay is full width, visual left is `overlay.offsetWidth - (facebox.x + facebox.width)`
+
+            // Calculate the visual center of the facebox on the overlay canvas (mirrored view)
+            const visualFaceboxCenterX_onOverlay = overlay.width - (facebox.x + facebox.width / 2);
+
+            // Convert this to screen coordinates
+            const readoutScreenX = overlayScreenX + visualFaceboxCenterX_onOverlay - (readout.offsetWidth / 2);
+            const readoutScreenY = overlayScreenY + facebox.y + facebox.height;
+
+            readout.style.left = `${readoutScreenX}px`;
+            readout.style.top = `${readoutScreenY}px`;
         }
 
         // Update emotions based on latest detections
+        // updateEmotions needs to be async if takePhoto is awaited inside it.
+        // Ensure this call doesn't cause issues if updateEmotions is now async.
         updateEmotions(currentResizedDetections);
 
         // Request the next frame
@@ -350,42 +401,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Prime the audio context on user interaction
         messagingSystem.primeAudioContext();
 
-        console.log("nameSubmit clicked"); // Step 1
+        console.log("nameSubmit clicked");
         const nameInput = document.getElementById('nameField');
         userName = nameInput.value.trim() || 'Guest';
+        
         messagingSystem.setLoadingMessage('Loading...');
         introOverlay.style.display = 'none';
-        console.log("Hiding introOverlay:", introOverlay); // Step 2
+        console.log("Hiding introOverlay:", introOverlay);
 
+        // Start video immediately so it's ready during greeting
+        messagingSystem.setLoadingMessage('Starting camera...');
+        try {
+            await startVideo();
+            console.log("Video started successfully - face detection should be active now");
+            messagingSystem.setLoadingMessage('Camera ready! Face detection active.');
+        } catch (error) {
+            console.error("Error starting video:", error);
+            messagingSystem.setLoadingMessage('Error starting camera. Please check console.');
+            return;
+        }
+
+        messagingSystem.setLoadingMessage('Connecting to OpenAI server and loading face tracking models...');
         const greeting = await getOpenAIGreeting(userName);
 
-        await messagingSystem.playMessage(greeting, async () => {
-            try { // Step 6
-                messagingSystem.clearMessage();
-                console.log("Greeting finished: Attempting to start video..."); // Step 4
-                await startVideo();
-                console.log("Greeting finished: Video started (or attempted)"); // Step 4
-                console.log("Greeting finished: Attempting to run tutorial..."); // Step 5
-                runTutorial();
-                console.log("Greeting finished: Tutorial run (or attempted)"); // Step 5
-            } catch (error) {
-                console.error("Error in nameSubmit setTimeout:", error); // Step 6
-                messagingSystem.setLoadingMessage('Error during startup. Please check console.'); // Step 6
-            }
-        });
-
-        // replace the first tutorialMessage with Welcome, User
-        tutorialMessages[0] = `Hello, ${userName}`;
+        if (greeting) {
+            // Play greeting message and wait for it to complete
+            await messagingSystem.playMessage(greeting);
+        } else {
+            // Fallback if greeting fails
+            await messagingSystem.playMessage(`Welcome to the Emotion Game, ${userName}!`);
+        }
+        
+        // Clear message and start tutorial after greeting is done
+        messagingSystem.clearMessage();
+        console.log("Greeting finished: Starting tutorial...");
+        runTutorial();
     });
 
     // Show tutorial messages one by one using the unified messaging system
     async function showNextMessage() {
         if (currentTutorialIndex >= tutorialMessages.length) {
             // All messages shown - show tutorial overlay
-            const tutorialOverlay = document.getElementById('tutorialOverlay');
-            messages.appendChild(tutorialOverlay);
-            tutorialOverlay.style.display = 'block';
-            tutorialOverlay.style.pointerEvents = 'auto';
+            showTutorialOverlay();
             return;
         }
 
@@ -400,10 +457,32 @@ document.addEventListener('DOMContentLoaded', async () => {
             showNextMessage(); // Continue with next message
         } else {
             // All messages shown - show tutorial overlay
-            const tutorialOverlay = document.getElementById('tutorialOverlay');
-            messages.appendChild(tutorialOverlay);
+            showTutorialOverlay();
+        }
+    }
+
+    function showTutorialOverlay() {
+        const tutorialOverlay = document.getElementById('tutorialOverlay');
+        if (tutorialOverlay) {
+            // Don't move the element, just show it in place
             tutorialOverlay.style.display = 'block';
             tutorialOverlay.style.pointerEvents = 'auto';
+        } else {
+            console.error('Tutorial overlay element not found');
+            // Fallback: create a simple ready button
+            const readyBtn = document.createElement('button');
+            readyBtn.textContent = 'READY';
+            readyBtn.style.position = 'absolute';
+            readyBtn.style.top = '50%';
+            readyBtn.style.left = '50%';
+            readyBtn.style.transform = 'translate(-50%, -50%)';
+            readyBtn.style.zIndex = '10000';
+            readyBtn.onclick = () => {
+                readyBtn.remove();
+                document.getElementById('overFace').style.pointerEvents = 'none';
+                runGame();
+            };
+            document.body.appendChild(readyBtn);
         }
     }
 
@@ -595,4 +674,5 @@ document.addEventListener('DOMContentLoaded', async () => {
             startVideo();
         }
     }
+
 });

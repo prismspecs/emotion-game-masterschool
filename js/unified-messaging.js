@@ -189,11 +189,12 @@ class UnifiedMessagingSystem {
             }
         } catch (error) {
             console.error('Error playing message:', error);
+        } finally {
+            this.isPlaying = false;
+            this.currentUtterance = null;
         }
 
-        this.isPlaying = false;
-        this.currentUtterance = null;
-
+        // Call the completion callback if provided
         if (onComplete) {
             onComplete();
         }
