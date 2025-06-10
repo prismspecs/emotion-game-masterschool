@@ -1,62 +1,16 @@
-// --- Speech Synthesis Setup ---
-let voices = [];
+// --- Unified Messaging System Setup ---
+let messagingSystem = null;
 
-function populateVoiceList() {
-    if (typeof speechSynthesis === 'undefined') {
-        return;
-    }
-    voices = speechSynthesis.getVoices();
+// Initialize the messaging system when DOM is ready
+function initializeMessagingSystem() {
+    messagingSystem = new UnifiedMessagingSystem();
 }
-
-populateVoiceList();
-if (typeof speechSynthesis !== 'undefined' && speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = populateVoiceList;
-}
-
-function speakText(text, onEndCallback) {
-    const messagesEl = document.getElementById('messages');
-    if (messagesEl) {
-        messagesEl.textContent = text;
-    }
-
-    if (typeof speechSynthesis === 'undefined') {
-        console.error('Speech synthesis not supported');
-        if (onEndCallback) onEndCallback();
-        return;
-    }
-
-    speechSynthesis.cancel(); // Cancel any previous speech
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    utterance.onend = () => {
-        if (onEndCallback) onEndCallback();
-    };
-
-    utterance.onerror = (event) => {
-        console.error('SpeechSynthesisUtterance error', event);
-        if (onEndCallback) onEndCallback(); // Ensure we don't block the game flow
-    };
-
-    // Voice selection logic
-    const selectedVoice = voices.find(voice => voice.name === 'Google US English') ||
-                          voices.find(voice => voice.name === 'Microsoft David Desktop - English (United States)') ||
-                          voices.find(voice => voice.name === 'Alex') ||
-                          voices.find(voice => voice.lang === 'en-US');
-
-    if (selectedVoice) {
-        utterance.voice = selectedVoice;
-    }
-
-    utterance.pitch = 0.5; // Lower pitch
-    utterance.rate = 0.9;  // Slightly slower rate
-    utterance.volume = 1;  // Max volume
-
-    speechSynthesis.speak(utterance);
-}
-// --- End Speech Synthesis Setup ---
+// --- End Unified Messaging System Setup ---
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize the unified messaging system
+    initializeMessagingSystem();
+    
     const introHeader = document.querySelector('#introOverlay h1');
 
     async function getOpenAIResponse(prompt, maxTokens) {
@@ -142,9 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         'You have completed the Emotion Game!'
     ];
 
-    const durationPerCharacter = 150;
     let currentTutorialIndex = 0;
-    let tutorialTimeoutId = null; // To store the timeout ID for skipping
 
     let userName = '';
 
@@ -396,24 +348,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     document.getElementById('nameSubmit').addEventListener('click', async () => {
         // Prime the audio context on user interaction
-        speechSynthesis.cancel(); // Clear any pending utterances
-        const primer = new SpeechSynthesisUtterance(' ');
-        primer.volume = 0;
-        speechSynthesis.speak(primer);
-
+        messagingSystem.primeAudioContext();
 
         console.log("nameSubmit clicked"); // Step 1
         const nameInput = document.getElementById('nameField');
         userName = nameInput.value.trim() || 'Guest';
-        messages.textContent = 'Loading...'
-        introOverlay.style.display = 'none'; // Extra semicolon was already removed, confirmed.
+        messagingSystem.setLoadingMessage('Loading...');
+        introOverlay.style.display = 'none';
         console.log("Hiding introOverlay:", introOverlay); // Step 2
 
         const greeting = await getOpenAIGreeting(userName);
 
-        speakText(greeting, async () => {
+        await messagingSystem.playMessage(greeting, async () => {
             try { // Step 6
-                messages.textContent = '';
+                messagingSystem.clearMessage();
                 console.log("Greeting finished: Attempting to start video..."); // Step 4
                 await startVideo();
                 console.log("Greeting finished: Video started (or attempted)"); // Step 4
@@ -422,79 +370,64 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.log("Greeting finished: Tutorial run (or attempted)"); // Step 5
             } catch (error) {
                 console.error("Error in nameSubmit setTimeout:", error); // Step 6
-                messages.textContent = 'Error during startup. Please check console.'; // Step 6
+                messagingSystem.setLoadingMessage('Error during startup. Please check console.'); // Step 6
             }
         });
 
-        // document.getElementById('lines').textContent = `Welcome ${userName}`;
         // replace the first tutorialMessage with Welcome, User
         tutorialMessages[0] = `Hello, ${userName}`;
     });
 
-    // Moved showNextMessage function to be accessible by both runTutorial and the keydown listener
-    function showNextMessage() {
-        messages.style.opacity = '0';
-
-        // Clear any existing timeout if we're advancing manually (e.g., by skipping)
-        if (tutorialTimeoutId) {
-            clearTimeout(tutorialTimeoutId);
-            tutorialTimeoutId = null;
+    // Show tutorial messages one by one using the unified messaging system
+    async function showNextMessage() {
+        if (currentTutorialIndex >= tutorialMessages.length) {
+            // All messages shown - show tutorial overlay
+            const tutorialOverlay = document.getElementById('tutorialOverlay');
+            messages.appendChild(tutorialOverlay);
+            tutorialOverlay.style.display = 'block';
+            tutorialOverlay.style.pointerEvents = 'auto';
+            return;
         }
 
-        setTimeout(() => {
-            if (currentTutorialIndex >= tutorialMessages.length) return; // All messages shown
+        const currentMessage = tutorialMessages[currentTutorialIndex];
+        currentTutorialIndex++;
 
-            const currentMessage = tutorialMessages[currentTutorialIndex];
-            messages.innerHTML = currentMessage;
-            messages.style.opacity = '1';
-            currentTutorialIndex++;
+        await messagingSystem.playMessage(currentMessage);
 
-            if (currentTutorialIndex < tutorialMessages.length) {
-                tutorialTimeoutId = setTimeout(showNextMessage, currentMessage.length * durationPerCharacter);
-            } else {
-                // Make tutorialOverlay a child of messages
-                const tutorialOverlay = document.getElementById('tutorialOverlay');
-                messages.appendChild(tutorialOverlay);
-                tutorialOverlay.style.display = 'block';
-                // allow pointer events on overFace
-                tutorialOverlay.style.pointerEvents = 'auto';
-
-                // Switch to game mode and select a new target emotion
-                // GAME_MODE = "game";
-                // selectNewTargetEmotion();
-            }
-        }, 1000);
+        // Brief pause before next message
+        if (currentTutorialIndex < tutorialMessages.length) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            showNextMessage(); // Continue with next message
+        } else {
+            // All messages shown - show tutorial overlay
+            const tutorialOverlay = document.getElementById('tutorialOverlay');
+            messages.appendChild(tutorialOverlay);
+            tutorialOverlay.style.display = 'block';
+            tutorialOverlay.style.pointerEvents = 'auto';
+        }
     }
 
-    function runEnd() {
+    async function runEnd() {
         // hide #readout
         readout.style.display = 'none';
 
         GAME_MODE = "end";
 
-        let index = 0;
-
-        function showNextEndMessage() {
-            messages.style.opacity = '0';
-            setTimeout(() => {
-                if (index >= endMessages.length) return; // All messages shown
-                const currentMessage = endMessages[index];
-                messages.innerHTML = currentMessage;
-                messages.style.opacity = '1';
-                index++;
-                if (index < endMessages.length) {
-                    setTimeout(showNextEndMessage, currentMessage.length * durationPerCharacter);
-                } else {
-                    // Fade the screen to black after the last message
-                    setTimeout(() => {
-                        const fadeOverlay = document.getElementById('fadeOverlay');
-                        fadeOverlay.style.opacity = '1';
-                    }, 2000); // Adjust the delay as needed
-                }
-            }, 1000);
+        // Play all end messages sequentially
+        for (let i = 0; i < endMessages.length; i++) {
+            await messagingSystem.playMessage(endMessages[i]);
+            
+            // Brief pause between messages (except for the last one)
+            if (i < endMessages.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
 
-        showNextEndMessage();
+        // Fade the screen to black after the last message
+        setTimeout(() => {
+            const fadeOverlay = document.getElementById('fadeOverlay');
+            fadeOverlay.style.opacity = '1';
+        }, 2000);
     }
 
 
@@ -631,8 +564,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('tutorialReadyBtn').addEventListener('click', () => {
         document.getElementById('tutorialOverlay').style.display = 'none';
-        // erase text from #messages
-        document.getElementById('messages').textContent = '';
+        // clear any messages
+        messagingSystem.clearMessage();
         // make overFace get no pointer events
         document.getElementById('overFace').style.pointerEvents = 'none';
 

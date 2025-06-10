@@ -170,18 +170,24 @@ button:active {
 }
 
 #messages {
-    /* background-color: rgba(255, 255, 255, 0.4); */
     width: 100%;
-    padding: 0.5em;
+    padding: 1em 2em;
     display: block;
-    font-size: 1.8em;
+    font-size: 1.6em;
+    font-weight: 500;
     text-align: center;
-    /* margin-top: 40%; */
     margin-top: 5%;
-    color: yellow;
-    text-shadow: 1px 1px 2px #000;
-    transition: opacity 1s;
-
+    color: #ffffff;
+    background-color: rgba(0, 0, 0, 0.7);
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    transition: opacity 0.3s ease-in-out;
+    line-height: 1.4;
+    max-width: 80%;
+    margin-left: auto;
+    margin-right: auto;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 #fadeOverlay {
