@@ -346,6 +346,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let emotionsCompleted = 0;
     let usedEmotions = [];
+    const EMOTIONS_PER_GAME = 6;
 
     async function updateEmotions(detections) {
         if (detections.length > 0) {
@@ -374,7 +375,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                             audio.play();
 
                             const timeToAchieve = (performance.now() - emotionAttemptStartTime) / 1000;
-                            const prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
+                            
+                            let prompt;
+                            // Check if this is the last emotion
+                            if (emotionsCompleted + 1 >= EMOTIONS_PER_GAME) {
+                                prompt = `The player just succeeded at expressing "${targetEmotion}", which was the final challenge! Give a short, conclusive, and celebratory message for finishing the game. Mention it's the end. Keep it under 25 words.`;
+                            } else {
+                                prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
+                            }
                             const congratsMessage = await getOpenAIResponse(prompt, 40);
 
                             await messagingSystem.playMessage(congratsMessage || `Well done!`);
@@ -382,7 +390,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             emotionsCompleted++;
                             usedEmotions.push(targetEmotion);
 
-                            if (emotionsCompleted >= 3) {
+                            if (emotionsCompleted >= EMOTIONS_PER_GAME) {
                                 runEnd();
                             } else {
                                 // A brief pause before selecting and announcing the next one.
