@@ -105,6 +105,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const COACHING_INTERVAL = 8000; // ms
     let isCoachingActive = false;
     let emotionAttemptStartTime = null;
+    let imageCapture = null; // For high-resolution photos
 
     // Pre-create emotion list items and sliders
     const emotionElements = {};
@@ -167,6 +168,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Got stream:", stream);
             video.srcObject = stream;
             console.log("Video source object set");
+
+            // Initialize ImageCapture for high-res photos if supported
+            const videoTrack = stream.getVideoTracks()[0];
+            if (typeof ImageCapture !== 'undefined') {
+                try {
+                    imageCapture = new ImageCapture(videoTrack);
+                    console.log('ImageCapture initialized for high-resolution photos.');
+                } catch (e) {
+                    console.error('Error creating ImageCapture:', e);
+                    imageCapture = null; // Ensure it's null on failure
+                }
+            } else {
+                console.warn('ImageCapture API not supported. Falling back to canvas capture for photos.');
+            }
 
             // Return a promise that resolves when video is ready
             return new Promise((resolve, reject) => {
@@ -351,6 +366,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (elapsed >= REQUIRED_HOLD_TIME) {
                             targetEmotionSelected = true; // Set early to prevent re-entry
                             readout.style.display = 'none'; // Hide readout immediately on success
+
+                            // Take photo immediately on success, but don't wait for it.
+                            captureAndSavePhoto();
 
                             const audio = new Audio('/sounds/ding.wav');
                             audio.play();
@@ -550,6 +568,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const fadeOverlay = document.getElementById('fadeOverlay');
             fadeOverlay.style.opacity = '1';
         }, 2000);
+
+        showNextMessage(); // Now calls the globally (within DOMContentLoaded) defined showNextMessage
     }
 
     function runTutorial() {
@@ -561,46 +581,62 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function runGame() {
         GAME_MODE = "game";
         await selectNewTargetEmotion();
-
-        // after 3 seconds, call takePhoto
-        setTimeout(async () => {
-            // guard if we have no face
-            if (!currentResizedDetections || currentResizedDetections.length === 0) {
-                console.log('No face detected, cannot take photo');
-                return;
-            }
-
-            // 1) Capture the photo data URL
-            const dataURL = takePhoto();
-            if (!dataURL) return;
-
-            // 2) Download locally (like original snippet)
-            downloadPhoto(dataURL, 'selfie.jpg');
-
-            // 3) Upload to Dropbox (do this later)
-            // try {
-            //     await uploadToDropbox(dataURL, 'selfie.jpg');
-            //     console.log('✅ Photo uploaded to Dropbox!');
-            // } catch (err) {
-            //     console.error('❌ Dropbox upload error:', err);
-            // }
-        }, 5000);
     }
 
     /**
      * Captures the bounding box from the first detection,
-     * draws it to an offscreen canvas, returns dataURL of the face
+     * draws it to an offscreen canvas, returns dataURL of the face.
+     * Uses ImageCapture for a full-resolution photo if available,
+     * otherwise falls back to capturing from the video element.
      */
-    function takePhoto() {
+    async function takePhoto() {
         if (!currentResizedDetections || currentResizedDetections.length === 0) {
             return null;
         }
 
         const faceboxResized = currentResizedDetections[0].detection.box;
 
-        // The facebox coordinates are relative to the resized overlay canvas.
-        // To draw from the original video stream, we need to scale these
-        // coordinates back to the video's intrinsic resolution.
+        // Use ImageCapture for a high-resolution photo if available
+        if (imageCapture) {
+            try {
+                console.log('Taking high-resolution photo with ImageCapture...');
+                const imageBitmap = await imageCapture.takePhoto();
+                console.log(`Photo captured with resolution: ${imageBitmap.width}x${imageBitmap.height}`);
+
+                // The facebox coordinates are relative to the resized overlay canvas.
+                // We need to scale these coordinates to the full photo resolution.
+                const scaleX = imageBitmap.width / overlay.width;
+                const scaleY = imageBitmap.height / overlay.height;
+
+                const sx = faceboxResized.x * scaleX;
+                const sy = faceboxResized.y * scaleY;
+                const sWidth = faceboxResized.width * scaleX;
+                const sHeight = faceboxResized.height * scaleY;
+
+                // create a canvas sized to the face bounding box
+                const canvas = document.createElement('canvas');
+                canvas.width = sWidth;
+                canvas.height = sHeight;
+                const ctx = canvas.getContext('2d');
+
+                // Draw the cropped face from the ImageBitmap onto the new canvas
+                ctx.drawImage(
+                    imageBitmap,
+                    sx, sy, sWidth, sHeight, // Source rectangle from the bitmap
+                    0, 0, sWidth, sHeight    // Destination rectangle on the canvas
+                );
+
+                // Convert to data URL
+                return canvas.toDataURL('image/jpeg');
+
+            } catch (error) {
+                console.error('Error using ImageCapture, falling back to video frame:', error);
+                // Fall through to the video-based capture if ImageCapture fails
+            }
+        }
+
+        // Fallback: capture from the visible video element
+        console.log('Taking photo from video stream (fallback)...');
         const scaleX = video.videoWidth / overlay.width;
         const scaleY = video.videoHeight / overlay.height;
 
@@ -688,6 +724,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         // "image/jpeg" as mime type
         return new Blob([arrayBuffer], { type: 'image/jpeg' });
+    }
+
+    async function captureAndSavePhoto() {
+        if (!currentResizedDetections || currentResizedDetections.length === 0) {
+            console.log('No face detected, cannot take photo');
+            return;
+        }
+
+        // 1) Capture the photo data URL
+        const dataURL = await takePhoto();
+        if (!dataURL) return;
+
+        // 2) Download locally with a descriptive name
+        const fileName = `${targetEmotion}-${Date.now()}.jpg`;
+        downloadPhoto(dataURL, fileName);
     }
 
     document.getElementById('tutorialReadyBtn').addEventListener('click', () => {
