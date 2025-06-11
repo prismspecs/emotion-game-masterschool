@@ -94,11 +94,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     let currentTutorialIndex = 0;
+    let tutorialTimeoutId = null;
 
     let userName = '';
 
     let bypassIntro = false;
     let GAME_MODE = "tutorial";
+
+    let lastCoachingTime = 0;
+    const COACHING_INTERVAL = 8000; // ms
+    let isCoachingActive = false;
+    let emotionAttemptStartTime = null;
 
     // Pre-create emotion list items and sliders
     const emotionElements = {};
@@ -323,12 +329,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         return start + (end - start) * amt;
     }
 
-
-
     let emotionsCompleted = 0;
     let usedEmotions = [];
 
-    function updateEmotions(detections) {
+    async function updateEmotions(detections) {
         if (detections.length > 0) {
             const emotions = detections[0].expressions;
 
@@ -345,32 +349,57 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // Calculate how long we've held above threshold
                         const elapsed = performance.now() - emotionHoldStartTime;
                         if (elapsed >= REQUIRED_HOLD_TIME) {
-                            // The user has maintained the required emotion for the required time
+                            targetEmotionSelected = true; // Set early to prevent re-entry
+                            readout.style.display = 'none'; // Hide readout immediately on success
+
                             const audio = new Audio('/sounds/ding.wav');
                             audio.play();
 
-                            messages.textContent = 'Good job! Moving to the next emotion!';
-                            targetEmotionSelected = true;
+                            const timeToAchieve = (performance.now() - emotionAttemptStartTime) / 1000;
+                            const prompt = `The player succeeded at expressing "${targetEmotion}" in ${timeToAchieve.toFixed(1)} seconds. Give a short, excited, congratulatory message. Mention the emotion. Keep it under 25 words.`;
+                            const congratsMessage = await getOpenAIResponse(prompt, 40);
 
-                            // Increment the emotions completed counter
+                            await messagingSystem.playMessage(congratsMessage || `Well done!`);
+                            
                             emotionsCompleted++;
                             usedEmotions.push(targetEmotion);
 
-                            // Check if the player has completed three emotions
                             if (emotionsCompleted >= 3) {
                                 runEnd();
                             } else {
-                                // Reset or move on to the next emotion
-                                setTimeout(() => {
-                                    targetEmotionSelected = false;
-                                    selectNewTargetEmotion();
-                                }, 2000);
+                                await new Promise(resolve => setTimeout(resolve, 1500));
+                                selectNewTargetEmotion();
                             }
                         }
                     }
                 } else {
                     // If we dropped below threshold, reset the hold timer
                     emotionHoldStartTime = null;
+
+                    // Coaching logic
+                    const now = performance.now();
+                    if (now - lastCoachingTime > COACHING_INTERVAL && !isCoachingActive && lastDetections.length > 0) {
+                        isCoachingActive = true;
+                        lastCoachingTime = now;
+
+                        const expressions = lastDetections[0].expressions;
+                        const dominantEmotion = Object.keys(expressions).reduce((a, b) => expressions[a] > expressions[b] ? a : b);
+
+                        let prompt;
+                        if (dominantEmotion !== targetEmotion) {
+                            prompt = `You are an encouraging coach in an emotion-training game. The player is trying to show "${targetEmotion}", but their expression is reading as "${dominantEmotion}". Give them one short, creative tip (under 25 words) to help them adjust their face.`;
+                        } else {
+                            prompt = `You are an encouraging coach in an emotion-training game. The player is on the right track showing "${targetEmotion}", but they need to make the expression stronger. Give them a very short tip (under 15 words) to intensify it.`;
+                        }
+                        
+                        const coachingMessage = await getOpenAIResponse(prompt, 50);
+                        
+                        if (coachingMessage) {
+                            await messagingSystem.playMessage(coachingMessage);
+                        }
+
+                        isCoachingActive = false;
+                    }
                 }
             }
         } else if (lastDetections.length > 0) {
@@ -381,7 +410,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     function selectNewTargetEmotion() {
         const availableEmotions = EMOTIONS.filter(emotion => emotion !== 'neutral' && !usedEmotions.includes(emotion));
         if (availableEmotions.length === 0) {
-            console.error('No more available emotions to select.');
+            console.log('All emotions completed!');
+            runEnd();
             return;
         }
         targetEmotion = availableEmotions[Math.floor(Math.random() * availableEmotions.length)];
@@ -389,6 +419,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         matchPercentageSpan.textContent = '0%';
         feedbackMessage.textContent = '';
         targetEmotionSelected = false;
+        emotionAttemptStartTime = performance.now();
+        lastCoachingTime = performance.now(); // Reset coaching timer for a grace period
+        readout.style.display = 'block';
     }
 
     // when they press submit after entering name (or press enter)
@@ -453,8 +486,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Brief pause before next message
         if (currentTutorialIndex < tutorialMessages.length) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            showNextMessage(); // Continue with next message
+            if (tutorialTimeoutId) clearTimeout(tutorialTimeoutId);
+            tutorialTimeoutId = setTimeout(showNextMessage, 1000); // Continue with next message
         } else {
             // All messages shown - show tutorial overlay
             showTutorialOverlay();
@@ -508,7 +541,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             fadeOverlay.style.opacity = '1';
         }, 2000);
     }
-
 
     function runTutorial() {
         GAME_MODE = "tutorial";
@@ -654,12 +686,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Event listener for skipping tutorial lines
     document.addEventListener('keydown', (event) => {
         if (event.key === 's' || event.key === 'S') {
-            if (GAME_MODE === "tutorial" && currentTutorialIndex < tutorialMessages.length) {
-                // Advance to the next message immediately
-                showNextMessage();
-            } else if (GAME_MODE === "tutorial" && currentTutorialIndex >= tutorialMessages.length) {
-                // If at the last message, simulate "READY" button click
-                document.getElementById('tutorialReadyBtn').click();
+            if (GAME_MODE === "tutorial") {
+                // Stop any scheduled next message
+                if (tutorialTimeoutId) {
+                    clearTimeout(tutorialTimeoutId);
+                    tutorialTimeoutId = null;
+                }
+
+                // Stop any TTS that is currently playing
+                messagingSystem.clearMessage();
+                
+                // Immediately mark the tutorial as "finished" to prevent showNextMessage from continuing
+                currentTutorialIndex = tutorialMessages.length;
+                
+                // Show the ready button so the user can proceed
+                showTutorialOverlay();
+
             }
         }
     });
