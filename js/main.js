@@ -465,7 +465,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tutorialOverlay = document.getElementById('tutorialOverlay');
         if (tutorialOverlay) {
             // Don't move the element, just show it in place
-            tutorialOverlay.style.display = 'block';
+            tutorialOverlay.style.display = 'flex';
             tutorialOverlay.style.pointerEvents = 'auto';
         } else {
             console.error('Tutorial overlay element not found');

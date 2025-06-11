@@ -207,3 +207,22 @@ button:active {
     pointer-events: none;
     /* Ensure it is on top of other elements */
 }
+
+#tutorialOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#tutorialReadyBtn {
+    padding: 1em 2em;
+    font-size: 2em;
+    background: #eee;
+    border: 2px solid #333;
+    border-radius: 10px;
+}
