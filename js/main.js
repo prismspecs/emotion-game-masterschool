@@ -417,12 +417,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         targetEmotion = availableEmotions[Math.floor(Math.random() * availableEmotions.length)];
 
-        // Announce the new emotion
-        const announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
-        const announcementMessage = await getOpenAIResponse(announcementPrompt, 30);
-        await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
-
-        // Update UI and state *after* announcement
+        // Update UI and state *immediately* so the game can proceed
+        // even if the announcement has issues.
         targetEmotionSpan.textContent = targetEmotion;
         matchPercentageSpan.textContent = '0%';
         feedbackMessage.textContent = '';
@@ -430,6 +426,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         emotionAttemptStartTime = performance.now();
         lastCoachingTime = performance.now(); // Reset coaching timer for a grace period
         readout.style.display = 'block';
+
+        // Announce the new emotion
+        const announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
+        const announcementMessage = await getOpenAIResponse(announcementPrompt, 30);
+        await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
+
     }
 
     // when they press submit after entering name (or press enter)
@@ -482,7 +484,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show tutorial messages one by one using the unified messaging system
     async function showNextMessage() {
         if (currentTutorialIndex >= tutorialMessages.length) {
-            // All messages shown - show tutorial overlay
+            // All messages shown or tutorial was skipped.
             showTutorialOverlay();
             return;
         }
@@ -492,14 +494,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         await messagingSystem.playMessage(currentMessage);
 
-        // Brief pause before next message
-        if (currentTutorialIndex < tutorialMessages.length) {
-            if (tutorialTimeoutId) clearTimeout(tutorialTimeoutId);
-            tutorialTimeoutId = setTimeout(showNextMessage, 1000); // Continue with next message
-        } else {
-            // All messages shown - show tutorial overlay
-            showTutorialOverlay();
+        // After await, if a skip happened during playback, the keydown
+        // handler will have updated currentTutorialIndex. We just need to stop.
+        if (currentTutorialIndex >= tutorialMessages.length) {
+            return;
         }
+
+        // Schedule the next message.
+        tutorialTimeoutId = setTimeout(showNextMessage, 1000);
     }
 
     function showTutorialOverlay() {
@@ -680,8 +682,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('tutorialReadyBtn').addEventListener('click', () => {
         document.getElementById('tutorialOverlay').style.display = 'none';
-        // clear any messages
-        messagingSystem.clearMessage();
+
+        // Stop any scheduled tutorial message, which could fire after we start the game.
+        if (tutorialTimeoutId) {
+            clearTimeout(tutorialTimeoutId);
+            tutorialTimeoutId = null;
+        }
+
+        // The skip handler (`S` key) has already cleared the message.
+        // Calling it again here can cause a race condition with the browser's
+        // speech synthesis API when the game immediately tries to speak.
+        // The new message from runGame() will correctly overwrite any lingering text.
+        
         // make overFace get no pointer events
         document.getElementById('overFace').style.pointerEvents = 'none';
 
@@ -692,19 +704,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('keydown', (event) => {
         if (event.key === 's' || event.key === 'S') {
             if (GAME_MODE === "tutorial") {
-                // Stop any scheduled next message
+                // Stop any scheduled next message first.
                 if (tutorialTimeoutId) {
                     clearTimeout(tutorialTimeoutId);
                     tutorialTimeoutId = null;
                 }
 
-                // Stop any TTS that is currently playing
+                // Stop any TTS that is currently playing.
                 messagingSystem.clearMessage();
                 
-                // Immediately mark the tutorial as "finished" to prevent showNextMessage from continuing
+                // Immediately mark the tutorial as "finished" to prevent showNextMessage from continuing.
                 currentTutorialIndex = tutorialMessages.length;
                 
-                // Show the ready button so the user can proceed
+                // Show the ready button so the user can proceed.
                 showTutorialOverlay();
 
             }

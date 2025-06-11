@@ -12,6 +12,7 @@ class UnifiedMessagingSystem {
         this.isPlaying = false;
         this.currentQueue = [];
         this.currentSentenceIndex = 0;
+        this.currentTimeoutId = null; // To track display timeouts
         this.initializeVoices();
         this.initializeMessageElement();
     }
@@ -90,17 +91,27 @@ class UnifiedMessagingSystem {
     async displayText(text, duration) {
         if (!this.messagesElement) return;
 
+        // Clear any existing timeout
+        if (this.currentTimeoutId) {
+            clearTimeout(this.currentTimeoutId);
+        }
+
         // Fade out current text
         this.messagesElement.style.opacity = '0';
         
-        await new Promise(resolve => setTimeout(resolve, 200)); // Wait for fade out
+        // Use a cancellable timeout for the fade-out
+        await new Promise(resolve => {
+            this.currentTimeoutId = setTimeout(resolve, 200);
+        });
         
         // Set new text and fade in
         this.messagesElement.textContent = text;
         this.messagesElement.style.opacity = '1';
         
-        // Keep text visible for the duration
-        return new Promise(resolve => setTimeout(resolve, duration));
+        // Keep text visible for the duration, also cancellable
+        return new Promise(resolve => {
+            this.currentTimeoutId = setTimeout(resolve, duration);
+        });
     }
 
     /**
@@ -156,6 +167,9 @@ class UnifiedMessagingSystem {
             utterance.onerror = (event) => {
                 console.error('Speech synthesis error:', event);
                 speechEnded = true;
+                // If speech fails, we might still be in a "playing" state.
+                // It's important to ensure we don't get stuck.
+                // We rely on the text display promise to eventually resolve.
                 checkCompletion();
             };
 
@@ -205,6 +219,12 @@ class UnifiedMessagingSystem {
      */
     stop() {
         this.isPlaying = false;
+
+        // Clear any pending timeouts for text display
+        if (this.currentTimeoutId) {
+            clearTimeout(this.currentTimeoutId);
+            this.currentTimeoutId = null;
+        }
         
         if (typeof speechSynthesis !== 'undefined') {
             speechSynthesis.cancel();
@@ -214,6 +234,8 @@ class UnifiedMessagingSystem {
         
         if (this.messagesElement) {
             this.messagesElement.style.opacity = '0';
+            // Use a timeout to clear the text after the fade-out completes.
+            // This timeout is self-contained and doesn't need to be tracked.
             setTimeout(() => {
                 if (this.messagesElement) {
                     this.messagesElement.textContent = '';
@@ -236,14 +258,8 @@ class UnifiedMessagingSystem {
      * Clear any displayed message
      */
     clearMessage() {
-        if (this.messagesElement) {
-            this.messagesElement.style.opacity = '0';
-            setTimeout(() => {
-                if (this.messagesElement) {
-                    this.messagesElement.textContent = '';
-                }
-            }, 200);
-        }
+        // Use the more robust stop() method to halt everything.
+        this.stop();
     }
 
     /**
