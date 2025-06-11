@@ -484,7 +484,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show tutorial messages one by one using the unified messaging system
     async function showNextMessage() {
         if (currentTutorialIndex >= tutorialMessages.length) {
-            // All messages shown or tutorial was skipped.
+            // All messages are done, or the tutorial was skipped. Show the overlay.
             showTutorialOverlay();
             return;
         }
@@ -494,14 +494,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         await messagingSystem.playMessage(currentMessage);
 
-        // After await, if a skip happened during playback, the keydown
-        // handler will have updated currentTutorialIndex. We just need to stop.
-        if (currentTutorialIndex >= tutorialMessages.length) {
-            return;
+        // After the message has played, check if we should continue or show the overlay.
+        // A skip ('S' key) during the await would have already advanced the index.
+        if (currentTutorialIndex < tutorialMessages.length) {
+            tutorialTimeoutId = setTimeout(showNextMessage, 1000);
+        } else {
+            // We've finished the last message.
+            showTutorialOverlay();
         }
-
-        // Schedule the next message.
-        tutorialTimeoutId = setTimeout(showNextMessage, 1000);
     }
 
     function showTutorialOverlay() {
@@ -588,28 +588,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     /**
- * Captures the bounding box from the first detection,
- * draws it to an offscreen canvas, returns dataURL of the face
- */
+     * Captures the bounding box from the first detection,
+     * draws it to an offscreen canvas, returns dataURL of the face
+     */
     function takePhoto() {
         if (!currentResizedDetections || currentResizedDetections.length === 0) {
             return null;
         }
 
-        const facebox = currentResizedDetections[0].detection.box;
+        const faceboxResized = currentResizedDetections[0].detection.box;
+
+        // The facebox coordinates are relative to the resized overlay canvas.
+        // To draw from the original video stream, we need to scale these
+        // coordinates back to the video's intrinsic resolution.
+        const scaleX = video.videoWidth / overlay.width;
+        const scaleY = video.videoHeight / overlay.height;
+
+        const sx = faceboxResized.x * scaleX;
+        const sy = faceboxResized.y * scaleY;
+        const sWidth = faceboxResized.width * scaleX;
+        const sHeight = faceboxResized.height * scaleY;
 
         // create a canvas sized to the face bounding box
         const canvas = document.createElement('canvas');
-        canvas.width = facebox.width;
-        canvas.height = facebox.height;
+        canvas.width = sWidth;
+        canvas.height = sHeight;
         const ctx = canvas.getContext('2d');
 
-        // Mirror considerations? If you have mirrored video, coordinates may differ.
-        // For a normal (non-mirrored) feed:
+        // Draw the cropped face from the video onto the new canvas
         ctx.drawImage(
             video,
-            facebox.x, facebox.y, facebox.width, facebox.height, // from the video
-            0, 0, facebox.width, facebox.height                  // onto the canvas
+            sx, sy, sWidth, sHeight, // Source rectangle from the video
+            0, 0, sWidth, sHeight    // Destination rectangle on the canvas
         );
 
         // Convert to data URL
