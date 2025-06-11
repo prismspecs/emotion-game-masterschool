@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function getOpenAIResponse(prompt, maxTokens) {
         try {
-            const body = { prompt };
+            const body = { prompt: `${prompt} Do not use markdown.` };
             if (maxTokens) {
                 body.max_tokens = maxTokens;
             }
@@ -356,7 +356,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             audio.play();
 
                             const timeToAchieve = (performance.now() - emotionAttemptStartTime) / 1000;
-                            const prompt = `The player succeeded at expressing "${targetEmotion}" in ${timeToAchieve.toFixed(1)} seconds. Give a short, excited, congratulatory message. Mention the emotion. Keep it under 25 words.`;
+                            const prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
                             const congratsMessage = await getOpenAIResponse(prompt, 40);
 
                             await messagingSystem.playMessage(congratsMessage || `Well done!`);
@@ -367,8 +367,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (emotionsCompleted >= 3) {
                                 runEnd();
                             } else {
+                                // A brief pause before selecting and announcing the next one.
                                 await new Promise(resolve => setTimeout(resolve, 1500));
-                                selectNewTargetEmotion();
+                                await selectNewTargetEmotion();
                             }
                         }
                     }
@@ -407,7 +408,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    function selectNewTargetEmotion() {
+    async function selectNewTargetEmotion() {
         const availableEmotions = EMOTIONS.filter(emotion => emotion !== 'neutral' && !usedEmotions.includes(emotion));
         if (availableEmotions.length === 0) {
             console.log('All emotions completed!');
@@ -415,6 +416,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
         targetEmotion = availableEmotions[Math.floor(Math.random() * availableEmotions.length)];
+
+        // Announce the new emotion
+        const announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
+        const announcementMessage = await getOpenAIResponse(announcementPrompt, 30);
+        await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
+
+        // Update UI and state *after* announcement
         targetEmotionSpan.textContent = targetEmotion;
         matchPercentageSpan.textContent = '0%';
         feedbackMessage.textContent = '';
@@ -548,12 +556,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         showNextMessage(); // Now calls the globally (within DOMContentLoaded) defined showNextMessage
     }
 
-    function runGame() {
+    async function runGame() {
         GAME_MODE = "game";
-        selectNewTargetEmotion();
-
-        // show #readout
-        readout.style.display = 'block';
+        await selectNewTargetEmotion();
 
         // after 3 seconds, call takePhoto
         setTimeout(async () => {
