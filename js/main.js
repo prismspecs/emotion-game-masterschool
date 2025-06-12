@@ -10,11 +10,15 @@ function initializeMessagingSystem() {
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize the unified messaging system
     initializeMessagingSystem();
+
+    const EMOTIONS = ['happy', 'sad', 'angry', 'neutral', 'surprised', 'disgusted', 'fearful'];
+    const EMOTIONS_PER_GAME = 5; 
+    let emotionsCompleted = 0;
+    let usedEmotions = [];
     
     const PLAYABLE_EMOTIONS = EMOTIONS.filter(e => e !== 'neutral');
     if (EMOTIONS_PER_GAME > PLAYABLE_EMOTIONS.length) {
         console.error(`Configuration error: EMOTIONS_PER_GAME (${EMOTIONS_PER_GAME}) is greater than the number of available playable emotions (${PLAYABLE_EMOTIONS.length}). The game may not end correctly.`);
-        // Optionally, display an error message to the user in the UI.
     }
 
     const introHeader = document.querySelector('#introOverlay h1');
@@ -82,11 +86,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const EMOTION_THRESHOLD = 70            // 80% match required
 
     const DETECTION_INTERVAL = 200; // ms
-
-    const EMOTIONS = ['happy', 'sad', 'angry', 'neutral', 'surprised', 'disgusted', 'fearful'];
-    const EMOTIONS_PER_GAME = 5; // For testing: play with 5 emotions
-    let emotionsCompleted = 0;
-    let usedEmotions = [];
 
     let tutorialMessages = [
         'Let me explain how this works.',
