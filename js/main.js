@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         'Make sure your face is clearly visible in the camera.',
         'When you see a target emotion, try to match it with your expression.',
         'Hold the expression steady until it registers.',
-        'Ready to begin?'
+        'The game will now begin.'
     ];
 
     let endMessages = [
@@ -348,7 +348,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function updateEmotions(detections) {
-        if (detections.length > 0) {
+        if (detections && detections.length > 0) {
+            lastDetections = detections; // Always update with the latest detection
             const emotions = detections[0].expressions;
 
             if (GAME_MODE == "game" && targetEmotion && !targetEmotionSelected) {
@@ -503,8 +504,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show tutorial messages one by one using the unified messaging system
     async function showNextMessage() {
         if (currentTutorialIndex >= tutorialMessages.length) {
-            // All messages are done, or the tutorial was skipped. Show the overlay.
-            showTutorialOverlay();
+            // All messages are done, or the tutorial was skipped. Start the game.
+            runGame();
             return;
         }
 
@@ -513,58 +514,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         await messagingSystem.playMessage(currentMessage);
 
-        // After the message has played, check if we should continue or show the overlay.
-        // A skip ('S' key) during the await would have already advanced the index.
+        // After the message has played, check if we should continue or start the game.
         if (currentTutorialIndex < tutorialMessages.length) {
             tutorialTimeoutId = setTimeout(showNextMessage, 1000);
         } else {
             // We've finished the last message.
-            showTutorialOverlay();
+            runGame();
         }
-    }
-
-    function showTutorialOverlay() {
-        const tutorialOverlay = document.getElementById('tutorialOverlay');
-        if (tutorialOverlay) {
-            // Don't move the element, just show it in place
-            tutorialOverlay.style.display = 'flex';
-            tutorialOverlay.style.pointerEvents = 'auto';
-        } else {
-            console.error('Tutorial overlay element not found');
-            // Fallback: create a simple ready button
-            const readyBtn = document.createElement('button');
-            readyBtn.textContent = 'READY';
-            readyBtn.style.position = 'absolute';
-            readyBtn.style.top = '50%';
-            readyBtn.style.left = '50%';
-            readyBtn.style.transform = 'translate(-50%, -50%)';
-            readyBtn.style.zIndex = '10000';
-            readyBtn.onclick = () => {
-                readyBtn.remove();
-                document.getElementById('overFace').style.pointerEvents = 'none';
-                runGame();
-            };
-            document.body.appendChild(readyBtn);
-        }
-    }
-
-    async function runEnd() {
-        readout.style.display = 'none';
-        GAME_MODE = "end";
-
-        const endPrompt = `The player has successfully completed all emotion challenges. Deliver a final, conclusive, and slightly menacing message to them, remarking on their success and the completion of the game. Address them by their name, ${userName}. Keep it under 30 words.`;
-        const endMessage = await getOpenAIResponse(endPrompt, 60);
-
-        await messagingSystem.playMessage(endMessage || 'The game is over. You have survived.');
-
-        // Fade the screen to black after the final message
-        setTimeout(() => {
-            const fadeOverlay = document.getElementById('fadeOverlay');
-            if (fadeOverlay) {
-                fadeOverlay.style.transition = 'opacity 2s ease-in-out';
-                fadeOverlay.style.opacity = '1';
-            }
-        }, 2000);
     }
 
     function runTutorial() {
@@ -736,26 +692,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         downloadPhoto(dataURL, fileName);
     }
 
-    document.getElementById('tutorialReadyBtn').addEventListener('click', () => {
-        document.getElementById('tutorialOverlay').style.display = 'none';
-
-        // Stop any scheduled tutorial message, which could fire after we start the game.
-        if (tutorialTimeoutId) {
-            clearTimeout(tutorialTimeoutId);
-            tutorialTimeoutId = null;
-        }
-
-        // The skip handler (`S` key) has already cleared the message.
-        // Calling it again here can cause a race condition with the browser's
-        // speech synthesis API when the game immediately tries to speak.
-        // The new message from runGame() will correctly overwrite any lingering text.
-        
-        // make overFace get no pointer events
-        document.getElementById('overFace').style.pointerEvents = 'none';
-
-        runGame();
-    });
-
     // Event listener for skipping tutorial lines
     document.addEventListener('keydown', (event) => {
         if (event.key === 's' || event.key === 'S') {
@@ -769,12 +705,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Stop any TTS that is currently playing.
                 messagingSystem.clearMessage();
                 
-                // Immediately mark the tutorial as "finished" to prevent showNextMessage from continuing.
+                // Immediately mark the tutorial as "finished" and start the game.
                 currentTutorialIndex = tutorialMessages.length;
-                
-                // Show the ready button so the user can proceed.
-                showTutorialOverlay();
-
+                runGame();
             }
         }
     });
