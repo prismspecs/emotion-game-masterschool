@@ -12,10 +12,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeMessagingSystem();
 
     const EMOTIONS = ['happy', 'sad', 'angry', 'neutral', 'surprised', 'disgusted', 'fearful'];
-    const EMOTIONS_PER_GAME = 5; 
+    const EMOTIONS_PER_GAME = 5;
     let emotionsCompleted = 0;
     let usedEmotions = [];
-    
+
     const PLAYABLE_EMOTIONS = EMOTIONS.filter(e => e !== 'neutral');
     if (EMOTIONS_PER_GAME > PLAYABLE_EMOTIONS.length) {
         console.error(`Configuration error: EMOTIONS_PER_GAME (${EMOTIONS_PER_GAME}) is greater than the number of available playable emotions (${PLAYABLE_EMOTIONS.length}). The game may not end correctly.`);
@@ -95,6 +95,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         'Hold the expression steady until it registers.',
         'The game will now begin.'
     ];
+    // tutorialMessages = ["skipping tutorial"];
 
     let currentTutorialIndex = 0;
     let tutorialTimeoutId = null;
@@ -191,10 +192,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             return new Promise((resolve, reject) => {
                 video.onloadedmetadata = () => {
                     console.log(`Video metadata loaded. Camera resolution: ${video.videoWidth}x${video.videoHeight}`);
-                    
+
                     resizeOverlayToVideo();
                     console.log('Overlay resized. Overlay dimensions:', overlay.width, 'x', overlay.height);
-                    
+
                     // get the overlay's offset
                     const overlayRect = overlay.getBoundingClientRect();
                     overlayOffsetX = overlayRect.left;
@@ -207,10 +208,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // start animation loop immediately
                     requestAnimationFrame(animate);
                     console.log('Face detection and animation started immediately');
-                    
+
                     resolve();
                 };
-                
+
                 video.onerror = (e) => {
                     console.error("Video element error:", e);
                     reject(e);
@@ -370,7 +371,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             if (messagingSystem.isPlaying) {
                                 messagingSystem.stop();
                             }
-                            
+
                             targetEmotionSelected = true; // Set early to prevent re-entry
                             readout.style.display = 'none'; // Hide readout immediately on success
 
@@ -381,12 +382,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                             audio.play();
 
                             const timeToAchieve = (performance.now() - emotionAttemptStartTime) / 1000;
-                            
+
                             const prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
                             const congratsMessage = await getOpenAIResponse(prompt, 40);
 
                             await messagingSystem.playMessage(congratsMessage || `Well done!`);
-                            
+
                             emotionsCompleted++;
                             usedEmotions.push(targetEmotion);
 
@@ -418,9 +419,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         } else {
                             prompt = `The player is on the right track showing "${targetEmotion}", but they need to make the expression stronger. Give them a very short, menacing, and cryptic tip (under 15 words) to intensify it.`;
                         }
-                        
+
                         const coachingMessage = await getOpenAIResponse(prompt, 50);
-                        
+
                         if (coachingMessage) {
                             await messagingSystem.playMessage(coachingMessage);
                         }
@@ -451,7 +452,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Announce the new emotion
         let announcementPrompt;
         if (usedEmotions.length === 0) {
-            announcementPrompt = `This is the first challenge. Announce the emotion "${targetEmotion}" as the starting test. Keep it short, under 15 words. For example: "Let's begin. Your first challenge: ${targetEmotion}!"`;
+            announcementPrompt = `This is the first challenge. Announce the emotion "${targetEmotion}" as the starting test. Do not welcome the player to the game, since that has already happened. Keep it short, under 15 words. For example: "Let's begin. Your first challenge: ${targetEmotion}!"`;
         } else {
             announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
         }
@@ -481,7 +482,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log("nameSubmit clicked");
         const nameInput = document.getElementById('nameField');
         userName = nameInput.value.trim() || 'Guest';
-        
+
         messagingSystem.setLoadingMessage('Loading...');
         introOverlay.style.display = 'none';
         console.log("Hiding introOverlay:", introOverlay);
@@ -508,7 +509,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Fallback if greeting fails
             await messagingSystem.playMessage(`Welcome to the Emotion Game, ${userName}!`);
         }
-        
+
         // Clear message and start tutorial after greeting is done
         messagingSystem.clearMessage();
         console.log("Greeting finished: Starting tutorial...");
@@ -771,7 +772,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Stop any TTS that is currently playing.
                 messagingSystem.clearMessage();
-                
+
                 // Immediately mark the tutorial as "finished" and start the game.
                 currentTutorialIndex = tutorialMessages.length;
                 runGame();
