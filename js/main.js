@@ -109,6 +109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     let isCoachingActive = false;
     let emotionAttemptStartTime = null;
     let imageCapture = null; // For high-resolution photos
+    let capturedPhotos = []; // Array to store photos for the end gallery
 
     // Pre-create emotion list items and sliders
     const emotionElements = {};
@@ -369,7 +370,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             readout.style.display = 'none'; // Hide readout immediately on success
 
                             // Take photo immediately on success, but don't wait for it.
-                            captureAndSavePhoto();
+                            captureAndStorePhoto();
 
                             const audio = new Audio('/sounds/ding.wav');
                             audio.play();
@@ -554,8 +555,42 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (fadeOverlay) {
                 fadeOverlay.style.transition = 'opacity 2s ease-in-out';
                 fadeOverlay.style.opacity = '1';
+                // After fade is complete, show the gallery
+                setTimeout(showPhotoGallery, 2000);
             }
         }, 2000);
+    }
+
+    function showPhotoGallery() {
+        const gallery = document.getElementById('photoGallery');
+        const container = document.getElementById('galleryContainer');
+        container.innerHTML = ''; // Clear previous items
+
+        capturedPhotos.forEach(photo => {
+            const item = document.createElement('div');
+            item.className = 'gallery-item';
+
+            const img = document.createElement('img');
+            img.src = photo.dataURL;
+
+            const label = document.createElement('span');
+            label.className = 'label';
+            label.textContent = photo.emotion;
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'save-btn';
+            saveBtn.textContent = 'Save';
+            saveBtn.onclick = () => {
+                downloadPhoto(photo.dataURL, `${photo.emotion}.jpg`);
+            };
+
+            item.appendChild(img);
+            item.appendChild(label);
+            item.appendChild(saveBtn);
+            container.appendChild(item);
+        });
+
+        gallery.style.display = 'flex';
     }
 
     /**
@@ -701,7 +736,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return new Blob([arrayBuffer], { type: 'image/jpeg' });
     }
 
-    async function captureAndSavePhoto() {
+    async function captureAndStorePhoto() {
         if (!currentResizedDetections || currentResizedDetections.length === 0) {
             console.log('No face detected, cannot take photo');
             return;
@@ -711,9 +746,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const dataURL = await takePhoto();
         if (!dataURL) return;
 
-        // 2) Download locally with a descriptive name
-        const fileName = `${targetEmotion}-${Date.now()}.jpg`;
-        downloadPhoto(dataURL, fileName);
+        // 2) Store the photo data URL with its emotion
+        capturedPhotos.push({ emotion: targetEmotion, dataURL: dataURL });
+        console.log(`Stored photo for ${targetEmotion}`);
     }
 
     // Event listener for skipping tutorial lines
