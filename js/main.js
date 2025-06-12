@@ -436,14 +436,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function selectNewTargetEmotion() {
         const availableEmotions = PLAYABLE_EMOTIONS.filter(emotion => !usedEmotions.includes(emotion));
-        
-        // The primary end condition is in updateEmotions. This is a fallback.
-        if (availableEmotions.length === 0) {
-            console.warn('All available emotions have been used. Ending game.');
-            runEnd();
-            return;
-        }
-
         targetEmotion = availableEmotions[Math.floor(Math.random() * availableEmotions.length)];
 
         // Update UI and state *immediately* so the game can proceed
@@ -469,13 +461,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         emotionsCompleted++;
         usedEmotions.push(targetEmotion);
 
-        if (emotionsCompleted >= EMOTIONS_PER_GAME) {
-            runEnd();
-        } else {
-            // A brief pause before selecting and announcing the next one.
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            await selectNewTargetEmotion();
-        }
+        // Ensure this call doesn't cause issues if updateEmotions is now async.
+        updateEmotions(currentResizedDetections);
+
+        // Request the next frame
+        requestAnimationFrame(animate);
     }
 
     // when they press submit after entering name (or press enter)
