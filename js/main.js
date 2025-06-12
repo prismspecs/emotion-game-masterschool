@@ -96,11 +96,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         'The game will now begin.'
     ];
 
-    let endMessages = [
-        'Thank you for playing!',
-        'You have completed the Emotion Game!'
-    ];
-
     let currentTutorialIndex = 0;
     let tutorialTimeoutId = null;
 
