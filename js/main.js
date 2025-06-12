@@ -349,6 +349,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function updateEmotions(detections) {
+        // If the AI is speaking, pause all emotion detection to prevent race conditions.
+        if (messagingSystem && messagingSystem.isPlaying) {
+            return;
+        }
+
         if (detections && detections.length > 0) {
             lastDetections = detections; // Always update with the latest detection
             const emotions = detections[0].expressions;
