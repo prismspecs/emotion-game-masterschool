@@ -13,6 +13,9 @@ const port = 3000;
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from the root directory
+app.use(express.static(path.resolve(process.cwd())));
+
 let personaPrompt = '';
 
 async function loadPersona() {
