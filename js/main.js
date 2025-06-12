@@ -349,11 +349,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function updateEmotions(detections) {
-        // If the AI is speaking, pause all emotion detection to prevent race conditions.
-        if (messagingSystem && messagingSystem.isPlaying) {
-            return;
-        }
-
         if (detections && detections.length > 0) {
             lastDetections = detections; // Always update with the latest detection
             const emotions = detections[0].expressions;
@@ -371,6 +366,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                         // Calculate how long we've held above threshold
                         const elapsed = performance.now() - emotionHoldStartTime;
                         if (elapsed >= REQUIRED_HOLD_TIME) {
+                            // If a message is currently playing (e.g., the challenge announcement or coaching), stop it.
+                            if (messagingSystem.isPlaying) {
+                                messagingSystem.stop();
+                            }
+                            
                             targetEmotionSelected = true; // Set early to prevent re-entry
                             readout.style.display = 'none'; // Hide readout immediately on success
 
