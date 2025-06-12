@@ -78,6 +78,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const DETECTION_INTERVAL = 200; // ms
 
     const EMOTIONS = ['happy', 'sad', 'angry', 'neutral', 'surprised', 'disgusted', 'fearful'];
+    const EMOTIONS_PER_GAME = 3; // For testing: play with 3 emotions
+    let emotionsCompleted = 0;
+    let usedEmotions = [];
 
     let tutorialMessages = [
         'Let me explain how this works.',
@@ -344,10 +347,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         return start + (end - start) * amt;
     }
 
-    let emotionsCompleted = 0;
-    let usedEmotions = [];
-    const EMOTIONS_PER_GAME = 6;
-
     async function updateEmotions(detections) {
         if (detections.length > 0) {
             const emotions = detections[0].expressions;
@@ -414,9 +413,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         let prompt;
                         if (dominantEmotion !== targetEmotion) {
-                            prompt = `You are an encouraging coach in an emotion-training game. The player is trying to show "${targetEmotion}", but their expression is reading as "${dominantEmotion}". Give them one short, creative tip (under 25 words) to help them adjust their face.`;
+                            prompt = `The player is trying to show "${targetEmotion}", but their expression is reading as "${dominantEmotion}". Give them a short, cryptic, and darkly humorous tip (under 25 words) to help them adjust their face.`;
                         } else {
-                            prompt = `You are an encouraging coach in an emotion-training game. The player is on the right track showing "${targetEmotion}", but they need to make the expression stronger. Give them a very short tip (under 15 words) to intensify it.`;
+                            prompt = `The player is on the right track showing "${targetEmotion}", but they need to make the expression stronger. Give them a very short, menacing, and cryptic tip (under 15 words) to intensify it.`;
                         }
                         
                         const coachingMessage = await getOpenAIResponse(prompt, 50);
@@ -556,28 +555,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function runEnd() {
-        // hide #readout
         readout.style.display = 'none';
-
         GAME_MODE = "end";
 
-        // Play all end messages sequentially
-        for (let i = 0; i < endMessages.length; i++) {
-            await messagingSystem.playMessage(endMessages[i]);
-            
-            // Brief pause between messages (except for the last one)
-            if (i < endMessages.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-        }
+        const endPrompt = `The player has successfully completed all emotion challenges. Deliver a final, conclusive, and slightly menacing message to them, remarking on their success and the completion of the game. Address them by their name, ${userName}. Keep it under 30 words.`;
+        const endMessage = await getOpenAIResponse(endPrompt, 60);
 
-        // Fade the screen to black after the last message
+        await messagingSystem.playMessage(endMessage || 'The game is over. You have survived.');
+
+        // Fade the screen to black after the final message
         setTimeout(() => {
             const fadeOverlay = document.getElementById('fadeOverlay');
-            fadeOverlay.style.opacity = '1';
+            if (fadeOverlay) {
+                fadeOverlay.style.transition = 'opacity 2s ease-in-out';
+                fadeOverlay.style.opacity = '1';
+            }
         }, 2000);
-
-        showNextMessage(); // Now calls the globally (within DOMContentLoaded) defined showNextMessage
     }
 
     function runTutorial() {
