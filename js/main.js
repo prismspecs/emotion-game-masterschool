@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const DETECTION_INTERVAL = 200; // ms
 
     const EMOTIONS = ['happy', 'sad', 'angry', 'neutral', 'surprised', 'disgusted', 'fearful'];
-    const EMOTIONS_PER_GAME = 3; // For testing: play with 3 emotions
+    const EMOTIONS_PER_GAME = 5; // For testing: play with 5 emotions
     let emotionsCompleted = 0;
     let usedEmotions = [];
 
@@ -375,13 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                             const timeToAchieve = (performance.now() - emotionAttemptStartTime) / 1000;
                             
-                            let prompt;
-                            // Check if this is the last emotion
-                            if (emotionsCompleted + 1 >= EMOTIONS_PER_GAME) {
-                                prompt = `The player just succeeded at expressing "${targetEmotion}", which was the final challenge! Give a short, conclusive, and celebratory message for finishing the game. Mention it's the end. Keep it under 25 words.`;
-                            } else {
-                                prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
-                            }
+                            const prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
                             const congratsMessage = await getOpenAIResponse(prompt, 40);
 
                             await messagingSystem.playMessage(congratsMessage || `Well done!`);
