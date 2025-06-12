@@ -448,7 +448,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         readout.style.display = 'block';
 
         // Announce the new emotion
-        const announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
+        let announcementPrompt;
+        if (usedEmotions.length === 0) {
+            announcementPrompt = `This is the first challenge. Announce the emotion "${targetEmotion}" as the starting test. Keep it short, under 15 words. For example: "Let's begin. Your first challenge: ${targetEmotion}!"`;
+        } else {
+            announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
+        }
         const announcementMessage = await getOpenAIResponse(announcementPrompt, 30);
         await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
 
@@ -532,6 +537,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function runGame() {
         GAME_MODE = "game";
         await selectNewTargetEmotion();
+    }
+
+    async function runEnd() {
+        readout.style.display = 'none';
+        GAME_MODE = "end";
+
+        const endPrompt = `The player has successfully completed all emotion challenges. Deliver a final, conclusive, and slightly menacing message to them, remarking on their success and the completion of the game. Address them by their name, ${userName}. Keep it under 30 words.`;
+        const endMessage = await getOpenAIResponse(endPrompt, 60);
+
+        await messagingSystem.playMessage(endMessage || 'The game is over. You have survived.');
+
+        // Fade the screen to black after the final message
+        setTimeout(() => {
+            const fadeOverlay = document.getElementById('fadeOverlay');
+            if (fadeOverlay) {
+                fadeOverlay.style.transition = 'opacity 2s ease-in-out';
+                fadeOverlay.style.opacity = '1';
+            }
+        }, 2000);
     }
 
     /**
