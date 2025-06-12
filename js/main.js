@@ -11,6 +11,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize the unified messaging system
     initializeMessagingSystem();
     
+    const PLAYABLE_EMOTIONS = EMOTIONS.filter(e => e !== 'neutral');
+    if (EMOTIONS_PER_GAME > PLAYABLE_EMOTIONS.length) {
+        console.error(`Configuration error: EMOTIONS_PER_GAME (${EMOTIONS_PER_GAME}) is greater than the number of available playable emotions (${PLAYABLE_EMOTIONS.length}). The game may not end correctly.`);
+        // Optionally, display an error message to the user in the UI.
+    }
+
     const introHeader = document.querySelector('#introOverlay h1');
 
     async function getOpenAIResponse(prompt, maxTokens) {
@@ -430,11 +436,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function selectNewTargetEmotion() {
-        const availableEmotions = EMOTIONS.filter(emotion => emotion !== 'neutral' && !usedEmotions.includes(emotion));
+        const availableEmotions = PLAYABLE_EMOTIONS.filter(emotion => !usedEmotions.includes(emotion));
         
-        // This is a safeguard. The primary end condition is in updateEmotions.
+        // The primary end condition is in updateEmotions. This is a fallback.
         if (availableEmotions.length === 0) {
-            console.log('All available emotions have been used. Ending game.');
+            console.warn('All available emotions have been used. Ending game.');
             runEnd();
             return;
         }
