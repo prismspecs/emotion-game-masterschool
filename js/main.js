@@ -431,11 +431,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function selectNewTargetEmotion() {
         const availableEmotions = EMOTIONS.filter(emotion => emotion !== 'neutral' && !usedEmotions.includes(emotion));
+        
+        // This is a safeguard. The primary end condition is in updateEmotions.
         if (availableEmotions.length === 0) {
-            console.log('All emotions completed!');
+            console.log('All available emotions have been used. Ending game.');
             runEnd();
             return;
         }
+
         targetEmotion = availableEmotions[Math.floor(Math.random() * availableEmotions.length)];
 
         // Update UI and state *immediately* so the game can proceed
@@ -458,6 +461,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         const announcementMessage = await getOpenAIResponse(announcementPrompt, 30);
         await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
 
+        emotionsCompleted++;
+        usedEmotions.push(targetEmotion);
+
+        if (emotionsCompleted >= EMOTIONS_PER_GAME) {
+            runEnd();
+        } else {
+            // A brief pause before selecting and announcing the next one.
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            await selectNewTargetEmotion();
+        }
     }
 
     // when they press submit after entering name (or press enter)
