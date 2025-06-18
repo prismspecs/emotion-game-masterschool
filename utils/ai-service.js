@@ -18,7 +18,7 @@ class AIService {
             const configPath = path.resolve(process.cwd(), 'config/prompt-engineering.json');
             const data = await fs.readFile(configPath, 'utf-8');
             this.config = JSON.parse(data);
-            console.log('AI Service configuration loaded successfully');
+            console.log(`\x1b[35m♪\x1b[0m AI Service configuration loaded successfully`);
             return this.config;
         } catch (error) {
             console.error('Failed to load AI service configuration:', error);

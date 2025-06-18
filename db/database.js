@@ -25,7 +25,7 @@ async function initializeDatabase() {
         // Create tables
         await createTables();
         
-        console.log('Database initialized successfully');
+        console.log(`\x1b[32m░░░\x1b[0m Database initialized successfully`);
         return db;
     } catch (error) {
         console.error('Database initialization failed:', error);
@@ -65,7 +65,7 @@ async function createTables() {
         );
     `);
 
-    console.log('Database tables created successfully');
+    console.log(`\x1b[33m⣢\x1b[0m Database tables created successfully`);
 }
 
 /**

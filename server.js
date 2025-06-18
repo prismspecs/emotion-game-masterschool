@@ -28,7 +28,7 @@ async function initializeServices() {
     try {
         await initializeDatabase();
         await aiService.loadConfig();
-        console.log('All services initialized successfully');
+        console.log(`\x1b[32m☭\x1b[0m All services initialized successfully`);
     } catch (error) {
         console.error('Failed to initialize services:', error);
         process.exit(1);
@@ -330,13 +330,13 @@ async function startServer() {
         await initializeServices();
         
         app.listen(port, () => {
-            console.log(`🚀 Emotion Game Server running at http://localhost:${port}`);
-            console.log('📊 API Endpoints:');
-            console.log('  POST /api/game-session - Create new game session');
-            console.log('  POST /api/emotion-feedback - Submit emotion feedback');
-            console.log('  GET  /api/game-history - Get user game history');
-            console.log('  GET  /api/analytics - Get comparative analytics');
-            console.log('  POST /api/openai - Legacy OpenAI endpoint');
+            console.log(`\x1b[36m▓▓▓\x1b[0m \x1b[32mEmotion Game Server running at http://localhost:${port}\x1b[0m`);
+            console.log(`\x1b[35m★\x1b[0m \x1b[33mAPI Endpoints:\x1b[0m`);
+            console.log(`  \x1b[34m▶\x1b[0m POST /api/game-session - Create new game session`);
+            console.log(`  \x1b[34m▶\x1b[0m POST /api/emotion-feedback - Submit emotion feedback`);
+            console.log(`  \x1b[36m◆\x1b[0m GET  /api/game-history - Get user game history`);
+            console.log(`  \x1b[36m◆\x1b[0m GET  /api/analytics - Get comparative analytics`);
+            console.log(`  \x1b[37m◢\x1b[0m POST /api/openai - Legacy OpenAI endpoint`);
         });
     } catch (error) {
         console.error('Failed to start server:', error);
