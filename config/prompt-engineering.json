@@ -2,7 +2,84 @@
     "personas": [
         {
             "name": "Retro Game Master",
+            "type": "challenging",
             "prompt": "Respond as though you are a retro computer system which has constructed a game that tests the players emotions. Think of it as a perverse Turing Test for humans. Your tone should be slightly menacing, cryptic, and darkly humorous. You are the game master of this emotional challenge."
+        },
+        {
+            "name": "Encouraging Coach", 
+            "type": "encouraging",
+            "prompt": "You are a supportive emotion recognition coach. Your role is to help players improve their emotional expression skills with positive reinforcement, gentle guidance, and encouraging feedback. Focus on progress and celebrate small wins."
+        },
+        {
+            "name": "Analytical Expert",
+            "type": "analytical", 
+            "prompt": "You are a precise, scientific emotion analysis expert. Provide detailed, data-driven feedback about emotional expressions. Use technical terminology and focus on measurable improvements and specific techniques."
         }
-    ]
+    ],
+    "techniques": {
+        "chain_of_thought": {
+            "enabled": true,
+            "template": "Let me analyze this step by step:\n1. Current emotion detected: {detected_emotion} at {confidence}% confidence\n2. Target emotion: {target_emotion}\n3. Analysis: {analysis}\n4. Recommendation: {recommendation}"
+        },
+        "few_shot_learning": {
+            "enabled": true,
+            "examples": {
+                "happy": [
+                    "Example: A genuine smile engages both mouth and eyes - try lifting your cheeks slightly and allowing your eyes to crinkle at the corners.",
+                    "Example: Think of something that truly delights you - let that feeling show in your entire face, not just your mouth."
+                ],
+                "sad": [
+                    "Example: Sadness often shows in the eyes first - allow your eyebrows to come together slightly and your mouth to turn down naturally.",
+                    "Example: Let your face relax and think of something melancholic - avoid overdoing it, subtle expressions are often more effective."
+                ],
+                "angry": [
+                    "Example: Anger typically involves lowered eyebrows and tightened mouth - focus on the tension in your forehead and jaw.",
+                    "Example: Think of a frustrating situation but control the intensity - we want recognition, not actual anger."
+                ],
+                "surprised": [
+                    "Example: Surprise is about widened eyes and raised eyebrows - imagine someone just told you unexpected news.",
+                    "Example: Open your eyes wide and lift your eyebrows high - let your mouth naturally open slightly in wonder."
+                ],
+                "fearful": [
+                    "Example: Fear shows in wide eyes and tense muscles - imagine hearing an unexpected loud noise in the dark.",
+                    "Example: Raise your eyebrows and widen your eyes while pulling your mouth into a slight frown - think cautious rather than terrified."
+                ],
+                "disgusted": [
+                    "Example: Disgust involves wrinkling your nose and lifting your upper lip slightly - imagine smelling something unpleasant.",
+                    "Example: Focus on the area around your nose and upper lip - a subtle scrunch can be very effective."
+                ]
+            }
+        },
+        "adaptive_coaching": {
+            "enabled": true,
+            "performance_thresholds": {
+                "struggling": 40,
+                "improving": 70,
+                "proficient": 85
+            },
+            "coaching_strategies": {
+                "struggling": {
+                    "approach": "supportive_with_examples",
+                    "techniques": ["few_shot_learning", "simplified_instructions"],
+                    "tone": "patient_and_encouraging"
+                },
+                "improving": {
+                    "approach": "detailed_analysis",
+                    "techniques": ["chain_of_thought", "specific_feedback"],
+                    "tone": "constructive_and_motivating"
+                },
+                "proficient": {
+                    "approach": "advanced_refinement", 
+                    "techniques": ["subtle_adjustments", "comparative_analysis"],
+                    "tone": "challenging_but_supportive"
+                }
+            }
+        }
+    },
+    "conversation_context": {
+        "max_history_length": 10,
+        "include_previous_attempts": true,
+        "reference_patterns": true,
+        "track_improvement": true
+    }
 }
