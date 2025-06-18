@@ -13,12 +13,12 @@ class AIService {
      */
     async loadConfig() {
         if (this.config) return this.config;
-        
+
         try {
             const configPath = path.resolve(process.cwd(), 'config/prompt-engineering.json');
             const data = await fs.readFile(configPath, 'utf-8');
             this.config = JSON.parse(data);
-            console.log(`\x1b[35m♪\x1b[0m AI Service configuration loaded successfully`);
+            console.log('AI Service configuration loaded successfully');
             return this.config;
         } catch (error) {
             console.error('Failed to load AI service configuration:', error);
@@ -31,7 +31,7 @@ class AIService {
      */
     getPersona(type = 'challenging') {
         if (!this.config) throw new Error('Configuration not loaded');
-        
+
         const persona = this.config.personas.find(p => p.type === type) || this.config.personas[0];
         return persona;
     }
@@ -122,7 +122,7 @@ class AIService {
      */
     analyzePerformanceFromHistory(sessionId) {
         const history = this.getConversationHistory(sessionId);
-        const attempts = history.filter(msg => 
+        const attempts = history.filter(msg =>
             msg.role === 'user' && msg.content.includes('confidence')
         );
 
@@ -135,17 +135,17 @@ class AIService {
         });
 
         const average = confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length;
-        
+
         // Simple trend analysis
         let trend = 'stable';
         if (confidenceScores.length >= 3) {
             const recent = confidenceScores.slice(-3);
             const earlier = confidenceScores.slice(-6, -3);
-            
+
             if (earlier.length > 0) {
                 const recentAvg = recent.reduce((sum, score) => sum + score, 0) / recent.length;
                 const earlierAvg = earlier.reduce((sum, score) => sum + score, 0) / earlier.length;
-                
+
                 if (recentAvg > earlierAvg + 5) trend = 'improving';
                 else if (recentAvg < earlierAvg - 5) trend = 'declining';
             }
@@ -170,22 +170,22 @@ class AIService {
 
         // Get persona
         const persona = this.getPersona(personaType);
-        
+
         // Analyze performance
         const performance = this.analyzePerformanceFromHistory(sessionId);
         const strategy = this.determineCoachingStrategy(performance.average || confidenceScore);
-        
+
         // Get few-shot examples if appropriate
         const examples = this.getFewShotExamples(targetEmotion);
-        
+
         // Build comprehensive context
         const contextParts = [];
-        
+
         // Add conversation history context
         const history = this.getConversationHistory(sessionId);
         if (history.length > 0) {
             contextParts.push("Previous conversation context:");
-            contextParts.push(...history.slice(-3).map(msg => 
+            contextParts.push(...history.slice(-3).map(msg =>
                 `${msg.role}: ${msg.content.substring(0, 100)}...`
             ));
         }
@@ -234,11 +234,11 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
 
         try {
             const response = await this.callOpenAI(fullPrompt);
-            
+
             // Add to conversation history
             this.addToConversationHistory(sessionId, 'user', `Attempted ${targetEmotion}, detected ${detectedEmotion} at ${confidenceScore}%`);
             this.addToConversationHistory(sessionId, 'assistant', response);
-            
+
             return response;
         } catch (error) {
             console.error('Failed to generate coaching:', error);

@@ -24,8 +24,8 @@ async function initializeDatabase() {
 
         // Create tables
         await createTables();
-        
-        console.log(`\x1b[32m░░░\x1b[0m Database initialized successfully`);
+
+        console.log('Database initialized successfully');
         return db;
     } catch (error) {
         console.error('Database initialization failed:', error);
@@ -65,7 +65,7 @@ async function createTables() {
         );
     `);
 
-    console.log(`\x1b[33m⣢\x1b[0m Database tables created successfully`);
+    console.log('Database tables created successfully');
 }
 
 /**
@@ -96,10 +96,10 @@ async function createGameSession(userName) {
 async function updateGameSession(sessionId, updates) {
     const database = getDatabase();
     const { completed_at, emotions_completed, total_score, session_data } = updates;
-    
+
     const fields = [];
     const values = [];
-    
+
     if (completed_at !== undefined) {
         fields.push('completed_at = ?');
         values.push(completed_at);
@@ -116,9 +116,9 @@ async function updateGameSession(sessionId, updates) {
         fields.push('session_data = ?');
         values.push(JSON.stringify(session_data));
     }
-    
+
     values.push(sessionId);
-    
+
     const query = `UPDATE game_sessions SET ${fields.join(', ')} WHERE id = ?`;
     await database.run(query, values);
 }
@@ -160,11 +160,11 @@ async function getGameSession(sessionId) {
         'SELECT * FROM game_sessions WHERE id = ?',
         [sessionId]
     );
-    
+
     if (session && session.session_data) {
         session.session_data = JSON.parse(session.session_data);
     }
-    
+
     return session;
 }
 
@@ -207,7 +207,7 @@ async function getSessionEmotionAttempts(sessionId) {
  */
 async function getAnalyticsData(userName = null) {
     const database = getDatabase();
-    
+
     // Base query for emotion performance
     const emotionQuery = `
         SELECT 
@@ -221,10 +221,10 @@ async function getAnalyticsData(userName = null) {
         ${userName ? 'WHERE gs.user_name = ?' : ''}
         GROUP BY target_emotion
     `;
-    
+
     const params = userName ? [userName] : [];
     const emotionStats = await database.all(emotionQuery, params);
-    
+
     // Overall statistics
     const overallQuery = `
         SELECT 
@@ -236,9 +236,9 @@ async function getAnalyticsData(userName = null) {
         LEFT JOIN emotion_attempts ea ON gs.id = ea.session_id
         ${userName ? 'WHERE gs.user_name = ?' : ''}
     `;
-    
+
     const overallStats = await database.get(overallQuery, params);
-    
+
     return {
         emotion_performance: emotionStats,
         overall_statistics: overallStats,

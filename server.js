@@ -5,11 +5,15 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 // Import our custom modules
-import { initializeDatabase, createGameSession, updateGameSession, createEmotionAttempt, 
-         getGameSession, getUserGameHistory, getAnalyticsData } from './db/database.js';
-import { validateRequest, gameSessionSchema, emotionFeedbackSchema, 
-         analyticsSchema, gameHistorySchema, createSuccessResponse, 
-         createErrorResponse, validateSessionExists } from './utils/validation.js';
+import {
+    initializeDatabase, createGameSession, updateGameSession, createEmotionAttempt,
+    getGameSession, getUserGameHistory, getAnalyticsData
+} from './db/database.js';
+import {
+    validateRequest, gameSessionSchema, emotionFeedbackSchema,
+    analyticsSchema, gameHistorySchema, createSuccessResponse,
+    createErrorResponse, validateSessionExists
+} from './utils/validation.js';
 import AIService from './utils/ai-service.js';
 
 dotenv.config();
@@ -28,7 +32,7 @@ async function initializeServices() {
     try {
         await initializeDatabase();
         await aiService.loadConfig();
-        console.log(`\x1b[32m☭\x1b[0m All services initialized successfully`);
+        console.log('All services initialized successfully');
     } catch (error) {
         console.error('Failed to initialize services:', error);
         process.exit(1);
@@ -43,9 +47,9 @@ async function initializeServices() {
 app.post('/api/game-session', validateRequest(gameSessionSchema), async (req, res) => {
     try {
         const { user_name, coaching_preference } = req.body;
-        
+
         const sessionId = await createGameSession(user_name);
-        
+
         // Generate welcome message using AI service
         const welcomeMessage = await aiService.callOpenAI(
             `As a ${coaching_preference} emotion coach, welcome ${user_name} to the Emotion Detection Game. Keep it brief and encouraging (under 50 words).`,
@@ -103,7 +107,7 @@ app.post('/api/emotion-feedback', validateRequest(emotionFeedbackSchema), async 
         // Get session to determine coaching preference
         const session = await getGameSession(session_id);
         const personaType = session?.session_data?.coaching_preference || 'encouraging';
-        
+
         const coaching = await aiService.generateEmotionCoaching(
             coachingData,
             session_id,
@@ -160,13 +164,13 @@ app.post('/api/emotion-feedback', validateRequest(emotionFeedbackSchema), async 
 app.get('/api/game-history', validateRequest(gameHistorySchema, 'query'), async (req, res) => {
     try {
         const { user_name, limit, include_attempts } = req.query;
-        
+
         const gameHistory = await getUserGameHistory(user_name, limit);
-        
+
         // If include_attempts is true, get detailed attempt data
         if (include_attempts && gameHistory.length > 0) {
             const { getSessionEmotionAttempts } = await import('./db/database.js');
-            
+
             for (const session of gameHistory) {
                 session.attempts = await getSessionEmotionAttempts(session.id);
             }
@@ -193,13 +197,13 @@ app.get('/api/game-history', validateRequest(gameHistorySchema, 'query'), async 
 app.get('/api/analytics', validateRequest(analyticsSchema, 'query'), async (req, res) => {
     try {
         const { user_name, time_range, emotion_filter } = req.query;
-        
+
         // Get user analytics
         const userAnalytics = user_name ? await getAnalyticsData(user_name) : null;
-        
+
         // Get global analytics for comparison
         const globalAnalytics = await getAnalyticsData();
-        
+
         // Process and structure the analytics data
         const analytics = {
             user_performance: userAnalytics,
@@ -238,7 +242,7 @@ app.get('/api/analytics', validateRequest(analyticsSchema, 'query'), async (req,
 app.post('/api/openai', async (req, res) => {
     try {
         const { prompt } = req.body;
-        
+
         if (!prompt) {
             return res.status(400).json(
                 createErrorResponse('Prompt is required', 'MISSING_PROMPT')
@@ -246,7 +250,7 @@ app.post('/api/openai', async (req, res) => {
         }
 
         const response = await aiService.callOpenAI(prompt, 50);
-        
+
         res.json(createSuccessResponse({
             response,
             model: 'gpt-4o-mini'
@@ -267,15 +271,15 @@ app.post('/api/openai', async (req, res) => {
 function generateComparativeAnalysis(userAnalytics, globalAnalytics, emotionFilter = null) {
     const userEmotions = userAnalytics.emotion_performance;
     const globalEmotions = globalAnalytics.emotion_performance;
-    
+
     const comparisons = userEmotions.map(userEmotion => {
         const globalEmotion = globalEmotions.find(ge => ge.target_emotion === userEmotion.target_emotion);
-        
+
         if (!globalEmotion) return null;
 
         const confidenceDiff = userEmotion.avg_confidence - globalEmotion.avg_confidence;
-        const successRateDiff = (userEmotion.successful_attempts / userEmotion.total_attempts) - 
-                               (globalEmotion.successful_attempts / globalEmotion.total_attempts);
+        const successRateDiff = (userEmotion.successful_attempts / userEmotion.total_attempts) -
+            (globalEmotion.successful_attempts / globalEmotion.total_attempts);
 
         return {
             emotion: userEmotion.target_emotion,
@@ -292,8 +296,8 @@ function generateComparativeAnalysis(userAnalytics, globalAnalytics, emotionFilt
             comparison: {
                 confidence_difference: parseFloat(confidenceDiff.toFixed(2)),
                 success_rate_difference: parseFloat((successRateDiff * 100).toFixed(2)),
-                performance_level: confidenceDiff > 5 ? 'above_average' : 
-                                 confidenceDiff < -5 ? 'below_average' : 'average'
+                performance_level: confidenceDiff > 5 ? 'above_average' :
+                    confidenceDiff < -5 ? 'below_average' : 'average'
             }
         };
     }).filter(Boolean);
@@ -328,15 +332,15 @@ app.use((req, res) => {
 async function startServer() {
     try {
         await initializeServices();
-        
+
         app.listen(port, () => {
-            console.log(`\x1b[36m▓▓▓\x1b[0m \x1b[32mEmotion Game Server running at http://localhost:${port}\x1b[0m`);
-            console.log(`\x1b[35m★\x1b[0m \x1b[33mAPI Endpoints:\x1b[0m`);
-            console.log(`  \x1b[34m▶\x1b[0m POST /api/game-session - Create new game session`);
-            console.log(`  \x1b[34m▶\x1b[0m POST /api/emotion-feedback - Submit emotion feedback`);
-            console.log(`  \x1b[36m◆\x1b[0m GET  /api/game-history - Get user game history`);
-            console.log(`  \x1b[36m◆\x1b[0m GET  /api/analytics - Get comparative analytics`);
-            console.log(`  \x1b[37m◢\x1b[0m POST /api/openai - Legacy OpenAI endpoint`);
+            console.log(`Emotion Game Server running at http://localhost:${port}`);
+            console.log('API Endpoints:');
+            console.log('  POST /api/game-session - Create new game session');
+            console.log('  POST /api/emotion-feedback - Submit emotion feedback');
+            console.log('  GET  /api/game-history - Get user game history');
+            console.log('  GET  /api/analytics - Get comparative analytics');
+            console.log('  POST /api/openai - Legacy OpenAI endpoint');
         });
     } catch (error) {
         console.error('Failed to start server:', error);

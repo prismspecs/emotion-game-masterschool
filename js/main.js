@@ -45,7 +45,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             const data = await response.json();
-            return data.choices[0].message.content.trim();
+            // The server returns { success: true, data: { response: "...", model: "..." } }
+            return data.data.response;
         } catch (error) {
             console.error('Failed to fetch OpenAI response:', error);
             return null; // Return null on error
@@ -95,7 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         'Hold the expression steady until it registers.',
         'The game will now begin.'
     ];
-    // tutorialMessages = ["skipping tutorial"];
+    tutorialMessages = ["skipping tutorial"];
 
     let currentTutorialIndex = 0;
     let tutorialTimeoutId = null;
@@ -391,9 +392,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                             emotionsCompleted++;
                             usedEmotions.push(targetEmotion);
 
+                            console.log(`\x1b[31m\x1b[1m☭ EMOTION CONQUERED: "${targetEmotion}" ☭\x1b[0m Count: ${emotionsCompleted}/${EMOTIONS_PER_GAME} | Used: [${usedEmotions.join(', ')}]`);
+
                             if (emotionsCompleted >= EMOTIONS_PER_GAME) {
+                                console.log(`\x1b[32m\x1b[1m🏆 VICTORY CONDITIONS MET! 🏆\x1b[0m Game ending with ${emotionsCompleted}/${EMOTIONS_PER_GAME} emotions!`);
                                 runEnd();
                             } else {
+                                console.log(`\x1b[33m\x1b[1m⚡ ADVANCING TO NEXT TARGET ⚡\x1b[0m Progress: ${emotionsCompleted}/${EMOTIONS_PER_GAME}`);
                                 // A brief pause before selecting and announcing the next one.
                                 await new Promise(resolve => setTimeout(resolve, 1500));
                                 await selectNewTargetEmotion();
@@ -436,8 +441,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function selectNewTargetEmotion() {
+        console.log(`\x1b[36m\x1b[1m🎯 TARGET SELECTION INITIATED 🎯\x1b[0m Used: [${usedEmotions.join(', ')}] | Completed: ${emotionsCompleted}`);
         const availableEmotions = PLAYABLE_EMOTIONS.filter(emotion => !usedEmotions.includes(emotion));
+        console.log(`\x1b[35m\x1b[1m🎲 EMOTION POOL: [${availableEmotions.join(', ')}] 🎲\x1b[0m`);
         targetEmotion = availableEmotions[Math.floor(Math.random() * availableEmotions.length)];
+        console.log(`\x1b[91m\x1b[1m🔥 NEW TARGET LOCKED: "${targetEmotion}" 🔥\x1b[0m`);
 
         // Update UI and state *immediately* so the game can proceed
         // even if the announcement has issues.
@@ -458,9 +466,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         const announcementMessage = await getOpenAIResponse(announcementPrompt, 30);
         await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
-
-        emotionsCompleted++;
-        usedEmotions.push(targetEmotion);
 
         // Ensure this call doesn't cause issues if updateEmotions is now async.
         updateEmotions(currentResizedDetections);
@@ -550,6 +555,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function runEnd() {
+        console.log(`\x1b[37m\x1b[40m\x1b[1m💀 GAME TERMINATION SEQUENCE ACTIVATED 💀\x1b[0m Final Score: ${emotionsCompleted} | Conquered: [${usedEmotions.join(', ')}]`);
         readout.style.display = 'none';
         GAME_MODE = "end";
 
