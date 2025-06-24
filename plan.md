@@ -25,7 +25,7 @@ The Emotion Challenge Game is an interactive web application that uses facial ex
 
 - **Text Generation Endpoint updating DB:** `/api/emotion-feedback` generates AI coaching and stores in database
 - **Structured Output:** All responses use standardized JSON format with success/error handling
-- **OpenAI Structured Output:** Uses `response_format: { "type": "json" }` with JSON schema validation
+- **OpenAI Structured Output:** Uses `response_format: { "type": "json_schema" }` with strict JSON schema validation and `strict: true`
 - **Conversation History Retention:** AI service maintains conversation context across session
 - **Prompt Engineering Techniques (2+):**
   1. **Chain of Thought:** Step-by-step emotion analysis and reasoning
@@ -308,7 +308,7 @@ CREATE TABLE conversation_messages (
 
 **Purpose:** Demonstrate OpenAI structured output with JSON schema validation
 **Validation:** Required fields for emotion coaching
-**Features:** Uses `response_format: { "type": "json" }` with schema validation
+**Features:** Uses `response_format: { "type": "json_schema" }` with strict schema validation and `strict: true`
 **Response:** Structured coaching with confidence level, technique tips, and encouragement level
 
 ## Performance Considerations
@@ -372,7 +372,7 @@ CREATE TABLE conversation_messages (
 **Achievement:** Enhanced AI integration with structured outputs:
 
 - **JSON Schema Validation:** Defined coaching response schema with required fields and enums
-- **Response Format Enforcement:** Uses `response_format: { "type": "json" }` for guaranteed JSON responses
+- **Response Format Enforcement:** Uses `response_format: { "type": "json_schema" }` with `strict: true` for guaranteed schema-compliant JSON responses
 - **Fallback Handling:** Graceful degradation to unstructured responses if structured output fails
 - **Schema Validation:** Custom validation ensures response integrity and data consistency
 

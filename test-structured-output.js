@@ -77,11 +77,12 @@ async function testStructuredOutput() {
 
     console.log('🎯 Structured Output Test Complete!');
     console.log('\nKey Features Demonstrated:');
-    console.log('✅ OpenAI response_format: { "type": "json" }');
-    console.log('✅ JSON schema validation');
+    console.log('✅ OpenAI response_format: { "type": "json_schema" }');
+    console.log('✅ Strict JSON schema validation with strict: true');
     console.log('✅ Consistent response structure');
     console.log('✅ Enum value enforcement');
     console.log('✅ Required field validation');
+    console.log('✅ additionalProperties: false enforcement');
 }
 
 // Run the test

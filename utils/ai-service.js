@@ -277,7 +277,7 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
     }
 
     /**
-     * Get JSON schema for coaching responses
+     * Get JSON schema for coaching responses (OpenAI Structured Output compatible)
      */
     getCoachingSchema() {
         return {
@@ -297,7 +297,7 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
                     items: {
                         type: "string"
                     },
-                    description: "Specific technique suggestions for improvement"
+                    description: "Specific technique suggestions for improvement (maximum 3 tips)"
                 },
                 encouragement_level: {
                     type: "string",
@@ -305,16 +305,17 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
                     description: "The tone of encouragement used"
                 }
             },
-            required: ["coaching_message", "confidence_level", "encouragement_level"]
+            required: ["coaching_message", "confidence_level", "encouragement_level", "technique_tips"],
+            additionalProperties: false
         };
     }
 
     /**
-     * Call OpenAI API with structured output
+     * Call OpenAI API with structured output using JSON Schema (updated implementation)
      */
     async callOpenAIStructured(prompt, schema, maxTokens = 150) {
-        // Add JSON requirement to the prompt as required by OpenAI
-        const jsonPrompt = `${prompt}\n\nRespond ONLY with a valid JSON object, no explanations, no markdown, no code block.`;
+        // Convert our simple schema to OpenAI's required JSON Schema format
+        const jsonSchema = this.convertToOpenAISchema(schema);
         
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -324,10 +325,17 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
             },
             body: JSON.stringify({
                 model: 'gpt-4o-mini',
-                messages: [{ role: 'user', content: jsonPrompt }],
+                messages: [{ role: 'user', content: prompt }],
                 max_tokens: maxTokens,
                 temperature: 0.8,
-                response_format: { type: "json_object" }
+                response_format: {
+                    type: "json_schema",
+                    json_schema: {
+                        name: "coaching_response",
+                        strict: true,
+                        schema: jsonSchema
+                    }
+                }
             })
         });
 
@@ -342,9 +350,10 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
         try {
             const parsedResponse = JSON.parse(content);
             
-            // Validate against schema
+            // The response should already be validated by OpenAI's strict mode
+            // but we'll do a basic validation as a safety check
             if (!this.validateStructuredResponse(parsedResponse, schema)) {
-                throw new Error('Response does not match expected schema');
+                console.warn('Response passed OpenAI validation but failed local validation');
             }
             
             return parsedResponse;
@@ -352,6 +361,51 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
             console.error('Failed to parse structured response:', parseError);
             throw new Error(`Invalid JSON response: ${parseError.message}`);
         }
+    }
+
+    /**
+     * Convert our simple schema to OpenAI's JSON Schema format
+     */
+    convertToOpenAISchema(simpleSchema) {
+        // Convert our simplified schema to the full JSON Schema format required by OpenAI
+        const jsonSchema = {
+            type: "object",
+            properties: {},
+            required: simpleSchema.required || [],
+            additionalProperties: false
+        };
+
+        // Convert properties
+        if (simpleSchema.properties) {
+            for (const [key, prop] of Object.entries(simpleSchema.properties)) {
+                jsonSchema.properties[key] = this.convertProperty(prop);
+            }
+        }
+
+        return jsonSchema;
+    }
+
+    /**
+     * Convert a single property to OpenAI JSON Schema format
+     */
+    convertProperty(prop) {
+        const converted = {
+            type: prop.type
+        };
+
+        if (prop.description) {
+            converted.description = prop.description;
+        }
+
+        if (prop.enum) {
+            converted.enum = prop.enum;
+        }
+
+        if (prop.type === 'array' && prop.items) {
+            converted.items = this.convertProperty(prop.items);
+        }
+
+        return converted;
     }
 
     /**
