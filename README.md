@@ -77,10 +77,22 @@ The application includes both the backend API server and serves the frontend fil
 
 ## API Endpoints
 
-The backend provides these endpoints:
+The backend provides these endpoints organized by functionality:
+
+### Requirements Summary
+
+- **2 POST Endpoints:** `/api/game-session`, `/api/emotion-feedback`
+- **2 GET Endpoints:** `/api/game-history`, `/api/analytics`
+- **Text Generation + DB Update:** `/api/emotion-feedback` generates AI coaching and stores in database
+- **Structured Output:** `/api/structured-coaching` demonstrates OpenAI JSON Schema validation
+- **Comparative Analysis:** `/api/analytics` provides use-case specific performance comparisons
+
+### Core Game Endpoints
 
 **POST /api/game-session**
 Creates a new game session with AI welcome message
+
+_Request:_
 
 ```json
 {
@@ -89,8 +101,23 @@ Creates a new game session with AI welcome message
 }
 ```
 
+_Response:_
+
+```json
+{
+  "success": true,
+  "data": {
+    "session_id": 123,
+    "welcome_message": "AI generated welcome",
+    "coaching_style": "encouraging"
+  }
+}
+```
+
 **POST /api/emotion-feedback**
-Submits an emotion attempt and gets AI coaching
+Submits an emotion attempt and gets AI coaching (Text Generation + DB Update)
+
+_Request:_
 
 ```json
 {
@@ -98,22 +125,185 @@ Submits an emotion attempt and gets AI coaching
   "target_emotion": "happy",
   "detected_emotion": "happy",
   "confidence_score": 85,
-  "attempt_duration": 1200
+  "attempt_duration": 1200,
+  "photo_data": "base64_image_optional"
 }
 ```
 
+_Response:_
+
+```json
+{
+  "success": true,
+  "data": {
+    "attempt_id": 456,
+    "coaching_message": "Great job! Your happiness expression shows...",
+    "structured_coaching": {
+      "coaching_message": "AI generated coaching",
+      "confidence_level": "high",
+      "technique_tips": ["tip1", "tip2"],
+      "encouragement_level": "supportive"
+    },
+    "confidence_analysis": {
+      "score": 85,
+      "target_met": true,
+      "improvement_trend": "improving"
+    }
+  }
+}
+```
+
+### Analytics Endpoints
+
 **GET /api/game-history**
-Gets your past game sessions
+Retrieves user's historical game data
+
+_Query Parameters:_
 
 ```
 ?user_name=yourname&limit=10&include_attempts=true
 ```
 
+_Response:_
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 123,
+      "user_name": "john",
+      "started_at": "2024-01-01T10:00:00Z",
+      "total_attempts": 15,
+      "avg_confidence": 78.5,
+      "attempts": [...]
+    }
+  ]
+}
+```
+
 **GET /api/analytics**
-Gets performance analysis and comparisons
+Generates comparative performance analysis (Use Case Specific)
+
+_Query Parameters:_
 
 ```
 ?user_name=yourname&time_range=month&emotion_filter=happy,sad
+```
+
+_Response:_
+
+```json
+{
+  "success": true,
+  "data": {
+    "user_performance": {
+      "emotion_performance": [...],
+      "overall_stats": {...}
+    },
+    "global_benchmarks": {...},
+    "comparative_analysis": [
+      {
+        "emotion": "happy",
+        "user_stats": {"avg_confidence": 85, "success_rate": 90},
+        "global_stats": {"avg_confidence": 75, "success_rate": 80},
+        "comparison": {
+          "confidence_difference": 10,
+          "performance_level": "above_average"
+        }
+      }
+    ]
+  }
+}
+```
+
+### Session Management
+
+**GET /api/session-history**
+Gets complete session data including conversation history
+
+_Query Parameters:_
+
+```
+?session_id=123
+```
+
+_Response:_
+
+```json
+{
+  "success": true,
+  "data": {
+    "session": {...},
+    "attempts": [...],
+    "conversation_history": [
+      {"speaker": "bot", "content": "Welcome!", "timestamp": "..."},
+      {"speaker": "player", "content": "attempt data", "timestamp": "..."}
+    ]
+  }
+}
+```
+
+**POST /api/conversation-message**
+Adds a message to conversation history log
+
+_Request:_
+
+```json
+{
+  "session_id": 123,
+  "message_type": "bot_message|player_attempt|system_message",
+  "speaker": "bot|player|system",
+  "content": "message content",
+  "metadata": { "optional": "data" }
+}
+```
+
+### Advanced Features
+
+**POST /api/structured-coaching**
+Demonstrates OpenAI Structured Outputs with JSON Schema validation
+
+_Request:_
+
+```json
+{
+  "target_emotion": "happy",
+  "detected_emotion": "happy",
+  "confidence_score": 85,
+  "coaching_preference": "encouraging"
+}
+```
+
+_Response:_
+
+```json
+{
+  "success": true,
+  "data": {
+    "structured_coaching": {
+      "coaching_message": "Structured AI response",
+      "confidence_level": "high",
+      "technique_tips": ["tip1", "tip2", "tip3"],
+      "encouragement_level": "supportive"
+    },
+    "metadata": {
+      "response_format": "json_schema",
+      "model": "gpt-4o-mini"
+    }
+  }
+}
+```
+
+**POST /api/openai** _(Legacy)_
+Simple OpenAI interaction for backward compatibility
+
+_Request:_
+
+```json
+{
+  "prompt": "Your prompt here"
+}
 ```
 
 ## Database Structure
