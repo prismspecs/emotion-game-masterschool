@@ -1,9 +1,3 @@
-to do
-
-Use the specific OpenAI structured output. For reference, @https://platform.openai.com/docs/guides/structured-outputs
-
-Everything works by just using npm start, so we can take the python simple server reference out of the Readme.
-
 # Emotion Challenge Game
 
 A web application that uses your webcam to detect facial expressions and challenges you to match different emotions. Built with real-time face detection, AI coaching, and performance analytics.
@@ -60,7 +54,7 @@ This project satisfies all the required criteria:
 
 You'll need Node.js and an OpenAI API key.
 
-**Backend Setup:**
+**Setup:**
 
 ```bash
 git clone <your-repo>
@@ -70,18 +64,7 @@ echo "OPENAI_API_KEY=your_key_here" > .env
 npm start
 ```
 
-**Frontend:**
-Serve the files using any method:
-
-```bash
-# Python
-python -m http.server 8000
-
-# Or use VS Code Live Server extension
-# Or any other static file server
-```
-
-Then open your browser to the frontend URL and allow webcam access.
+The application includes both the backend API server and serves the frontend files. Once running, open your browser to `http://localhost:3000` and allow webcam access.
 
 ## How to Play
 
