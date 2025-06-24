@@ -108,6 +108,7 @@ app.post('/api/emotion-feedback', validateRequest(emotionFeedbackSchema), async 
         const session = await getGameSession(session_id);
         const personaType = session?.session_data?.coaching_preference || 'encouraging';
 
+        // Get structured coaching response
         const coaching = await aiService.generateEmotionCoaching(
             coachingData,
             session_id,
@@ -135,6 +136,7 @@ app.post('/api/emotion-feedback', validateRequest(emotionFeedbackSchema), async 
             }
         });
 
+        // Enhanced response with structured coaching data
         const response = createSuccessResponse({
             attempt_id: attemptId,
             coaching_message: coaching,
@@ -146,6 +148,16 @@ app.post('/api/emotion-feedback', validateRequest(emotionFeedbackSchema), async 
             session_progress: {
                 total_attempts: conversationSummary.performance_summary.count + 1,
                 average_confidence: conversationSummary.performance_summary.average
+            },
+            structured_coaching: {
+                message: coaching,
+                confidence_level: confidence_score < 40 ? 'low' : confidence_score < 70 ? 'medium' : 'high',
+                technique_tips: [
+                    confidence_score < 40 ? 'Focus on basic expression fundamentals' : 
+                    confidence_score < 70 ? 'Refine your technique with specific adjustments' : 
+                    'Maintain consistency and try advanced variations'
+                ],
+                encouragement_level: personaType
             }
         });
 
@@ -263,6 +275,59 @@ app.post('/api/openai', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/structured-coaching - Get structured coaching response
+ * Demonstrates OpenAI structured output with JSON schema validation
+ */
+app.post('/api/structured-coaching', async (req, res) => {
+    try {
+        const { 
+            target_emotion, 
+            detected_emotion, 
+            confidence_score, 
+            coaching_preference = 'encouraging' 
+        } = req.body;
+
+        if (!target_emotion || !detected_emotion || confidence_score === undefined) {
+            return res.status(400).json(
+                createErrorResponse('target_emotion, detected_emotion, and confidence_score are required', 'MISSING_FIELDS')
+            );
+        }
+
+        // Create a prompt for structured coaching
+        const prompt = `As a ${coaching_preference} emotion coach, provide feedback for a user who:
+- Target emotion: ${target_emotion}
+- Detected emotion: ${detected_emotion}
+- Confidence score: ${confidence_score}%
+
+Provide coaching that is appropriate for their performance level.`;
+
+        // Get structured response using OpenAI's structured output
+        const structuredResponse = await aiService.callOpenAIStructured(
+            prompt, 
+            aiService.getCoachingSchema(),
+            200
+        );
+
+        res.json(createSuccessResponse({
+            structured_coaching: structuredResponse,
+            metadata: {
+                target_emotion,
+                detected_emotion,
+                confidence_score,
+                coaching_preference,
+                response_format: 'json',
+                model: 'gpt-4o-mini'
+            }
+        }));
+    } catch (error) {
+        console.error('Error generating structured coaching:', error);
+        res.status(500).json(
+            createErrorResponse('Failed to generate structured coaching', 'STRUCTURED_OUTPUT_ERROR')
+        );
+    }
+});
+
 // --- UTILITY FUNCTIONS ---
 
 /**
@@ -341,6 +406,7 @@ async function startServer() {
             console.log('  GET  /api/game-history - Get user game history');
             console.log('  GET  /api/analytics - Get comparative analytics');
             console.log('  POST /api/openai - Legacy OpenAI endpoint');
+            console.log('  POST /api/structured-coaching - Get structured coaching response');
         });
     } catch (error) {
         console.error('Failed to start server:', error);

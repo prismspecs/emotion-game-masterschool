@@ -1,5 +1,4 @@
-import fetch from 'node-fetch';
-import fs from 'fs/promises';
+import fs from 'fs';
 import path from 'path';
 
 class AIService {
@@ -12,17 +11,16 @@ class AIService {
      * Load prompt engineering configuration
      */
     async loadConfig() {
-        if (this.config) return this.config;
-
-        try {
-            const configPath = path.resolve(process.cwd(), 'config/prompt-engineering.json');
-            const data = await fs.readFile(configPath, 'utf-8');
-            this.config = JSON.parse(data);
-            console.log('AI Service configuration loaded successfully');
-            return this.config;
-        } catch (error) {
-            console.error('Failed to load AI service configuration:', error);
-            throw error;
+        if (!this.config) {
+            try {
+                const configPath = path.resolve(process.cwd(), 'config/prompt-engineering.json');
+                const data = await fs.promises.readFile(configPath, 'utf-8');
+                this.config = JSON.parse(data);
+                console.log('AI Service configuration loaded successfully');
+            } catch (error) {
+                console.error('Failed to load prompt engineering config:', error);
+                this.config = {};
+            }
         }
     }
 
@@ -30,10 +28,8 @@ class AIService {
      * Get persona by type or default to first available
      */
     getPersona(type = 'challenging') {
-        if (!this.config) throw new Error('Configuration not loaded');
-
-        const persona = this.config.personas.find(p => p.type === type) || this.config.personas[0];
-        return persona;
+        if (!this.config?.personas) return { prompt: 'You are an emotion coach.' };
+        return this.config.personas.find(p => p.type === type) || this.config.personas[0];
     }
 
     /**
@@ -110,7 +106,7 @@ class AIService {
             timestamp: new Date().toISOString()
         });
 
-        // Limit history length
+        // Keep history within limits
         const maxLength = this.config?.conversation_context?.max_history_length || 10;
         if (history.length > maxLength) {
             history.splice(0, history.length - maxLength);
@@ -155,7 +151,7 @@ class AIService {
     }
 
     /**
-     * Generate emotion coaching with advanced prompt engineering
+     * Generate emotion coaching with advanced prompt engineering and structured output
      */
     async generateEmotionCoaching(emotionData, sessionId, personaType = 'encouraging') {
         await this.loadConfig();
@@ -233,16 +229,26 @@ ${cotPrompt}
 Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${strategy?.approach || 'general guidance'}. Keep response under 100 words and avoid markdown formatting.`;
 
         try {
-            const response = await this.callOpenAI(fullPrompt);
-
+            // Use structured output for coaching
+            const structuredResponse = await this.callOpenAIStructured(fullPrompt, this.getCoachingSchema());
+            
             // Add to conversation history
             this.addToConversationHistory(sessionId, 'user', `Attempted ${targetEmotion}, detected ${detectedEmotion} at ${confidenceScore}%`);
-            this.addToConversationHistory(sessionId, 'assistant', response);
+            this.addToConversationHistory(sessionId, 'assistant', structuredResponse.coaching_message);
 
-            return response;
+            return structuredResponse.coaching_message;
         } catch (error) {
-            console.error('Failed to generate coaching:', error);
-            return this.getFallbackCoaching(targetEmotion, detectedEmotion, confidenceScore);
+            console.error('Failed to generate structured coaching:', error);
+            // Fallback to unstructured response
+            try {
+                const fallbackResponse = await this.callOpenAI(fullPrompt);
+                this.addToConversationHistory(sessionId, 'user', `Attempted ${targetEmotion}, detected ${detectedEmotion} at ${confidenceScore}%`);
+                this.addToConversationHistory(sessionId, 'assistant', fallbackResponse);
+                return fallbackResponse;
+            } catch (fallbackError) {
+                console.error('Fallback also failed:', fallbackError);
+                return this.getFallbackCoaching(targetEmotion, detectedEmotion, confidenceScore);
+            }
         }
     }
 
@@ -271,7 +277,119 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
     }
 
     /**
-     * Call OpenAI API
+     * Get JSON schema for coaching responses
+     */
+    getCoachingSchema() {
+        return {
+            type: "object",
+            properties: {
+                coaching_message: {
+                    type: "string",
+                    description: "The main coaching feedback message (under 100 words)"
+                },
+                confidence_level: {
+                    type: "string",
+                    enum: ["low", "medium", "high"],
+                    description: "Assessment of the user's current confidence level"
+                },
+                technique_tips: {
+                    type: "array",
+                    items: {
+                        type: "string"
+                    },
+                    description: "Specific technique suggestions for improvement"
+                },
+                encouragement_level: {
+                    type: "string",
+                    enum: ["supportive", "neutral", "challenging"],
+                    description: "The tone of encouragement used"
+                }
+            },
+            required: ["coaching_message", "confidence_level", "encouragement_level"]
+        };
+    }
+
+    /**
+     * Call OpenAI API with structured output
+     */
+    async callOpenAIStructured(prompt, schema, maxTokens = 150) {
+        // Add JSON requirement to the prompt as required by OpenAI
+        const jsonPrompt = `${prompt}\n\nRespond ONLY with a valid JSON object, no explanations, no markdown, no code block.`;
+        
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'gpt-4o-mini',
+                messages: [{ role: 'user', content: jsonPrompt }],
+                max_tokens: maxTokens,
+                temperature: 0.8,
+                response_format: { type: "json_object" }
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`OpenAI API Error: ${JSON.stringify(errorData)}`);
+        }
+
+        const data = await response.json();
+        const content = data.choices[0].message.content;
+        
+        try {
+            const parsedResponse = JSON.parse(content);
+            
+            // Validate against schema
+            if (!this.validateStructuredResponse(parsedResponse, schema)) {
+                throw new Error('Response does not match expected schema');
+            }
+            
+            return parsedResponse;
+        } catch (parseError) {
+            console.error('Failed to parse structured response:', parseError);
+            throw new Error(`Invalid JSON response: ${parseError.message}`);
+        }
+    }
+
+    /**
+     * Validate structured response against schema
+     */
+    validateStructuredResponse(response, schema) {
+        // Basic validation - you could use a proper JSON schema validator here
+        if (typeof response !== 'object' || response === null) {
+            return false;
+        }
+
+        // Check required fields
+        if (schema.required) {
+            for (const field of schema.required) {
+                if (!(field in response)) {
+                    console.error(`Missing required field: ${field}`);
+                    return false;
+                }
+            }
+        }
+
+        // Check enum values
+        if (schema.properties) {
+            for (const [field, prop] of Object.entries(schema.properties)) {
+                if (field in response) {
+                    if (prop.enum && !prop.enum.includes(response[field])) {
+                        console.error(`Invalid enum value for ${field}: ${response[field]}`);
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Call OpenAI API (legacy unstructured method)
      */
     async callOpenAI(prompt, maxTokens = 100) {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {

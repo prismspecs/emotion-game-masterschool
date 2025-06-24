@@ -1,3 +1,11 @@
+to do
+
+I need to log the entire "conversation". This should include everything the openAI bot says, as well as the player's tries and how long each one takes. The point of this is to update a SQL table and retain this in the game history. The user should be able to access this later: Put this chat history in with the 5 photos at the end.
+
+Use the specific OpenAI structured output. For reference, @https://platform.openai.com/docs/guides/structured-outputs
+
+Everything works by just using npm start, so we can take the python simple server reference out of the Readme.
+
 # Emotion Challenge Game
 
 A web application that uses your webcam to detect facial expressions and challenges you to match different emotions. Built with real-time face detection, AI coaching, and performance analytics.
@@ -14,7 +22,7 @@ This project satisfies all the required criteria:
 
 - **Express API**: 4 endpoints (2 POST, 2 GET) with proper validation
 - **SQLite Database**: 2 tables storing game sessions and emotion attempts
-- **AI Text Generation**: Coaching endpoint that generates responses and saves to database  
+- **AI Text Generation**: Coaching endpoint that generates responses and saves to database
 - **Structured Responses**: Consistent JSON format across all endpoints
 - **Comparative Analysis**: Performance benchmarking against global averages
 - **Prompt Engineering**: Multiple techniques including Chain of Thought and Few-shot Learning
@@ -23,24 +31,28 @@ This project satisfies all the required criteria:
 ## Main Features
 
 **Game Mechanics**
+
 - Real-time emotion detection using your webcam
 - Progressive challenges where you match target emotions
 - Audio feedback when you succeed
 - Tutorial to get you started
 
 **AI Coaching**
+
 - Three different coaching styles (encouraging, analytical, challenging)
 - Personalized feedback based on your performance
 - AI remembers your progress across sessions
 - Advanced prompt engineering for better responses
 
 **Analytics**
-- Track your improvement over time  
+
+- Track your improvement over time
 - Compare your performance to other users
 - Detailed statistics for each emotion type
 - Success rates and confidence scoring
 
 **Technical**
+
 - Professional REST API with validation
 - SQLite database for data persistence
 - Secure API key management
@@ -51,6 +63,7 @@ This project satisfies all the required criteria:
 You'll need Node.js and an OpenAI API key.
 
 **Backend Setup:**
+
 ```bash
 git clone <your-repo>
 cd emotion-game-masterschool
@@ -61,6 +74,7 @@ npm start
 
 **Frontend:**
 Serve the files using any method:
+
 ```bash
 # Python
 python -m http.server 8000
@@ -86,6 +100,7 @@ The backend provides these endpoints:
 
 **POST /api/game-session**
 Creates a new game session with AI welcome message
+
 ```json
 {
   "user_name": "your_name",
@@ -95,11 +110,12 @@ Creates a new game session with AI welcome message
 
 **POST /api/emotion-feedback**
 Submits an emotion attempt and gets AI coaching
+
 ```json
 {
   "session_id": 123,
   "target_emotion": "happy",
-  "detected_emotion": "happy", 
+  "detected_emotion": "happy",
   "confidence_score": 85,
   "attempt_duration": 1200
 }
@@ -107,12 +123,14 @@ Submits an emotion attempt and gets AI coaching
 
 **GET /api/game-history**
 Gets your past game sessions
+
 ```
 ?user_name=yourname&limit=10&include_attempts=true
 ```
 
 **GET /api/analytics**
 Gets performance analysis and comparisons
+
 ```
 ?user_name=yourname&time_range=month&emotion_filter=happy,sad
 ```
@@ -122,10 +140,12 @@ Gets performance analysis and comparisons
 Two main tables:
 
 **game_sessions** - Tracks each game session
+
 - Basic info like user name, start/end times, scores
 - JSON field for flexible session metadata
 
-**emotion_attempts** - Individual emotion tries  
+**emotion_attempts** - Individual emotion tries
+
 - Links to session, stores target/detected emotions
 - Confidence scores, timing, AI coaching responses
 - Optional photo data
@@ -135,9 +155,10 @@ Two main tables:
 The AI coaching uses several prompt engineering techniques:
 
 **Chain of Thought** - Step-by-step analysis:
+
 ```
 1. Detected: happy at 75% confidence
-2. Target: happy  
+2. Target: happy
 3. Analysis: Good match but could be more expressive
 4. Recommendation: Try engaging your eyes more
 ```
@@ -145,8 +166,9 @@ The AI coaching uses several prompt engineering techniques:
 **Few-shot Learning** - Provides examples for each emotion type based on a database of techniques.
 
 **Adaptive Coaching** - Adjusts strategy based on your performance:
+
 - Struggling (< 40%): Supportive with detailed examples
-- Improving (40-70%): Specific technical feedback  
+- Improving (40-70%): Specific technical feedback
 - Proficient (> 70%): Advanced refinement tips
 
 The AI maintains conversation history so it can reference your past attempts and track improvement trends.
@@ -183,6 +205,7 @@ emotion-game-masterschool/
 ## Configuration
 
 The AI coaching behavior is configured in `config/prompt-engineering.json`. You can adjust:
+
 - Coaching persona definitions
 - Performance thresholds for adaptive coaching
 - Few-shot learning examples
@@ -205,7 +228,7 @@ The app processes webcam frames at 30fps for smooth real-time detection. Databas
 ## Security
 
 - Environment variables for API keys
-- Input validation on all endpoints  
+- Input validation on all endpoints
 - Parameterized SQL queries prevent injection
 - CORS configured appropriately
 - Error messages don't leak sensitive info

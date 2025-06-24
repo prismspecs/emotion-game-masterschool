@@ -96,7 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         'Hold the expression steady until it registers.',
         'The game will now begin.'
     ];
-    tutorialMessages = ["skipping tutorial"];
+    // tutorialMessages = ["skipping tutorial"];
 
     let currentTutorialIndex = 0;
     let tutorialTimeoutId = null;
@@ -488,6 +488,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         const nameInput = document.getElementById('nameField');
         userName = nameInput.value.trim() || 'Guest';
 
+        messagingSystem.setLoadingMessage('Testing audio system...');
+        
+        // Test if TTS is working
+        const ttsWorking = await messagingSystem.testSpeechSynthesis();
+        if (!ttsWorking) {
+            console.warn('⚠️ TTS test failed - audio may not work properly');
+            messagingSystem.setLoadingMessage('Audio test failed - continuing with text-only mode');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        } else {
+            console.log('✅ TTS test passed - audio should work');
+        }
+
         messagingSystem.setLoadingMessage('Loading...');
         introOverlay.style.display = 'none';
         console.log("Hiding introOverlay:", introOverlay);
@@ -518,7 +530,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Clear message and start tutorial after greeting is done
         messagingSystem.clearMessage();
         console.log("Greeting finished: Starting tutorial...");
-        runTutorial();
+        
+        // Add a small delay to ensure messaging system is ready
+        setTimeout(() => {
+            runTutorial();
+        }, 500);
     });
 
     // Show tutorial messages one by one using the unified messaging system
