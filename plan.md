@@ -85,6 +85,28 @@ CREATE TABLE emotion_attempts (
 - AI-generated coaching responses
 - Optional photo storage for analysis
 
+### Table: `conversation_messages`
+
+```sql
+CREATE TABLE conversation_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER REFERENCES game_sessions(id),
+    message_type TEXT NOT NULL, -- 'bot_message', 'player_attempt', 'system_message'
+    speaker TEXT NOT NULL, -- 'bot', 'player', 'system'
+    content TEXT NOT NULL,
+    metadata TEXT, -- JSON: attempt_data, timing_info, etc.
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Purpose:** Store complete conversation history between bot and player
+**Key Features:**
+
+- Complete chat log with message categorization
+- Timing data for player attempts
+- Metadata storage for context and analytics
+- Chronological conversation tracking
+
 ## Core Features
 
 1. Real-time facial expression detection and analysis
@@ -199,7 +221,16 @@ CREATE TABLE emotion_attempts (
 - [x] Performance tracking and trend analysis
 - [x] Adaptive coaching based on user progress
 
-### Phase 4: Polish and Optimization
+### Phase 4: Conversation Logging System ✅
+
+- [x] Complete conversation history logging
+- [x] Player attempt timing and performance tracking
+- [x] Database schema for conversation storage
+- [x] API endpoints for conversation management
+- [x] Enhanced photo gallery with chat history display
+- [x] Session management and completion tracking
+
+### Phase 5: Polish and Optimization
 
 - [ ] Performance optimization for real-time processing
 - [ ] Enhanced accessibility features
@@ -251,6 +282,27 @@ CREATE TABLE emotion_attempts (
 **Purpose:** Direct OpenAI API access for backward compatibility
 **Validation:** Simple prompt validation
 **Response:** Raw AI response with model information
+
+### GET /api/session-history
+
+**Purpose:** Retrieve complete session data including conversation history and photos
+**Validation:** `session_id` parameter required
+**Response:** Session info, conversation messages, emotion attempts, and captured photos
+**Features:** Complete game session reconstruction for analysis and display
+
+### POST /api/conversation-message
+
+**Purpose:** Add message to conversation history log
+**Validation:** `session_id`, `message_type`, `speaker`, `content` required
+**Features:** Real-time conversation logging with metadata support
+**Database:** Inserts into `conversation_messages` table
+
+### PATCH /api/game-session
+
+**Purpose:** Update existing game session (completion, scores, etc.)
+**Validation:** `session_id` required, optional completion data
+**Features:** Session completion tracking and final score recording
+**Database:** Updates `game_sessions` table
 
 ### POST /api/structured-coaching
 
@@ -323,3 +375,14 @@ CREATE TABLE emotion_attempts (
 - **Response Format Enforcement:** Uses `response_format: { "type": "json" }` for guaranteed JSON responses
 - **Fallback Handling:** Graceful degradation to unstructured responses if structured output fails
 - **Schema Validation:** Custom validation ensures response integrity and data consistency
+
+### Complete Conversation Logging System
+
+**Achievement:** Implemented comprehensive conversation tracking and history:
+
+- **Real-time Message Logging:** Every bot message and player attempt is logged with timing data
+- **Session Management:** Complete game session lifecycle tracking from start to completion
+- **Database Integration:** New `conversation_messages` table stores chronological chat history
+- **Enhanced Photo Gallery:** Side-by-side display of captured photos and conversation history
+- **Performance Analytics:** Detailed timing data for each player attempt and coaching interaction
+- **API Endpoints:** RESTful endpoints for conversation retrieval and session management

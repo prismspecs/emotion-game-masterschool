@@ -425,9 +425,9 @@ class UnifiedMessagingSystem {
             speechSynthesis.cancel();
             
             // Test with a very short utterance to see if TTS is working
-            const testUtterance = new SpeechSynthesisUtterance('test');
-            testUtterance.volume = 0.1; // Very quiet
-            testUtterance.rate = 2.0; // Very fast
+            const testUtterance = new SpeechSynthesisUtterance('.');
+            testUtterance.volume = 0; // Completely silent
+            testUtterance.rate = 10.0; // Very fast
             
             testUtterance.onstart = () => {
                 console.log('✅ TTS test successful - audio context primed');
@@ -457,9 +457,9 @@ class UnifiedMessagingSystem {
         }
 
         return new Promise((resolve) => {
-            const testUtterance = new SpeechSynthesisUtterance('test');
+            const testUtterance = new SpeechSynthesisUtterance('.');
             testUtterance.volume = 0; // Silent
-            testUtterance.rate = 3.0; // Very fast
+            testUtterance.rate = 10.0; // Very fast
             
             let testPassed = false;
             
@@ -468,7 +468,7 @@ class UnifiedMessagingSystem {
                     console.log('❌ Speech synthesis test timed out');
                     resolve(false);
                 }
-            }, 2000);
+            }, 1000);
             
             testUtterance.onstart = () => {
                 console.log('✅ Speech synthesis test passed');

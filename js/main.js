@@ -23,6 +23,140 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const introHeader = document.querySelector('#introOverlay h1');
 
+    // Conversation logging system
+    let currentSessionId = null;
+    let gameStartTime = null;
+    let conversationHistory = [];
+
+    // Initialize conversation logging
+    async function initializeSession(userName) {
+        console.log('🚀 Initializing session for user:', userName);
+        try {
+            const response = await fetch('http://localhost:3000/api/game-session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_name: userName,
+                    coaching_preference: 'challenging' // Default preference
+                })
+            });
+
+            console.log('📡 Session API response status:', response.status);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('❌ Session creation failed:', errorData);
+                throw new Error(`Failed to create session: ${response.status}`);
+            }
+
+            const data = await response.json();
+            currentSessionId = data.data.session_id;
+            gameStartTime = new Date();
+            console.log('✅ Session created successfully:', {
+                sessionId: currentSessionId,
+                userName: userName,
+                welcomeMessage: data.data.welcome_message?.substring(0, 50) + '...'
+            });
+            return data.data.welcome_message;
+        } catch (error) {
+            console.error('❌ Failed to initialize session:', error);
+            return null;
+        }
+    }
+
+    // Log conversation message
+    async function logConversationMessage(messageType, speaker, content, metadata = null) {
+        if (!currentSessionId) {
+            console.warn('No session ID available for logging message');
+            return;
+        }
+
+        console.log('🗣️ Logging conversation message:', {
+            session_id: currentSessionId,
+            messageType,
+            speaker,
+            content: content.substring(0, 50) + '...',
+            metadata
+        });
+
+        try {
+            const response = await fetch('http://localhost:3000/api/conversation-message', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    session_id: currentSessionId,
+                    message_type: messageType,
+                    speaker: speaker,
+                    content: content,
+                    metadata: metadata
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('❌ Failed to log conversation message:', errorData);
+                return;
+            }
+
+            const result = await response.json();
+            console.log('✅ Message logged successfully:', result);
+
+            // Also store locally for immediate access
+            conversationHistory.push({
+                timestamp: new Date().toISOString(),
+                messageType,
+                speaker,
+                content,
+                metadata
+            });
+        } catch (error) {
+            console.error('❌ Failed to log conversation message:', error);
+        }
+    }
+
+    // Log player attempt with timing
+    async function logPlayerAttempt(targetEmotion, detectedEmotion, confidence, attemptDuration) {
+        const attemptData = {
+            target_emotion: targetEmotion,
+            detected_emotion: detectedEmotion,
+            confidence_score: confidence,
+            attempt_duration: attemptDuration
+        };
+
+        // Log as conversation message
+        await logConversationMessage(
+            'player_attempt',
+            'player',
+            `Attempted ${targetEmotion}, detected ${detectedEmotion} (${confidence.toFixed(1)}% confidence)`,
+            {
+                ...attemptData,
+                timing: {
+                    attempt_duration: attemptDuration,
+                    game_time: gameStartTime ? Date.now() - gameStartTime.getTime() : null
+                }
+            }
+        );
+    }
+
+    // Enhanced messaging function that logs bot responses
+    async function getOpenAIResponseWithLogging(prompt, maxTokens, messageType = 'bot_message') {
+        const response = await getOpenAIResponse(prompt, maxTokens);
+        
+        if (response) {
+            await logConversationMessage(messageType, 'bot', response, {
+                prompt: prompt.substring(0, 200), // Store truncated prompt for context
+                response_length: response.length,
+                max_tokens: maxTokens
+            });
+        }
+
+        return response;
+    }
+
     async function getOpenAIResponse(prompt, maxTokens) {
         try {
             const body = { prompt: `${prompt} Do not use markdown.` };
@@ -383,9 +517,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                             audio.play();
 
                             const timeToAchieve = (performance.now() - emotionAttemptStartTime) / 1000;
+                            const attemptDurationMs = performance.now() - emotionAttemptStartTime;
+
+                            // Log successful player attempt
+                            const dominantEmotion = Object.keys(lastDetections[0].expressions).reduce((a, b) => 
+                                lastDetections[0].expressions[a] > lastDetections[0].expressions[b] ? a : b
+                            );
+                            const confidence = lastDetections[0].expressions[targetEmotion] * 100;
+                            await logPlayerAttempt(targetEmotion, dominantEmotion, confidence, attemptDurationMs);
 
                             const prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
-                            const congratsMessage = await getOpenAIResponse(prompt, 40);
+                            const congratsMessage = await getOpenAIResponseWithLogging(prompt, 40, 'success_message');
 
                             await messagingSystem.playMessage(congratsMessage || `Well done!`);
 
@@ -425,7 +567,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             prompt = `The player is on the right track showing "${targetEmotion}", but they need to make the expression stronger. Give them a very short, menacing, and cryptic tip (under 15 words) to intensify it.`;
                         }
 
-                        const coachingMessage = await getOpenAIResponse(prompt, 50);
+                        const coachingMessage = await getOpenAIResponseWithLogging(prompt, 50, 'coaching_message');
 
                         if (coachingMessage) {
                             await messagingSystem.playMessage(coachingMessage);
@@ -464,7 +606,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
         }
-        const announcementMessage = await getOpenAIResponse(announcementPrompt, 30);
+        const announcementMessage = await getOpenAIResponseWithLogging(announcementPrompt, 30, 'challenge_announcement');
         await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
 
         // Ensure this call doesn't cause issues if updateEmotions is now async.
@@ -517,14 +659,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         messagingSystem.setLoadingMessage('Connecting to OpenAI server and loading face tracking models...');
-        const greeting = await getOpenAIGreeting(userName);
+        
+        // Initialize session and get greeting
+        const greeting = await initializeSession(userName);
 
         if (greeting) {
-            // Play greeting message and wait for it to complete
+            // Log and play greeting message
+            await logConversationMessage('welcome_message', 'bot', greeting, {
+                user_name: userName,
+                session_initialized: true
+            });
             await messagingSystem.playMessage(greeting);
         } else {
             // Fallback if greeting fails
-            await messagingSystem.playMessage(`Welcome to the Emotion Game, ${userName}!`);
+            const fallbackGreeting = `Welcome to the Emotion Game, ${userName}!`;
+            await logConversationMessage('welcome_message', 'bot', fallbackGreeting, {
+                user_name: userName,
+                fallback: true
+            });
+            await messagingSystem.playMessage(fallbackGreeting);
         }
 
         // Clear message and start tutorial after greeting is done
@@ -547,6 +700,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const currentMessage = tutorialMessages[currentTutorialIndex];
         currentTutorialIndex++;
+
+        // Log tutorial message
+        await logConversationMessage('tutorial_message', 'bot', currentMessage, {
+            tutorial_step: currentTutorialIndex,
+            total_steps: tutorialMessages.length
+        });
 
         await messagingSystem.playMessage(currentMessage);
 
@@ -576,7 +735,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         GAME_MODE = "end";
 
         const endPrompt = `The player has successfully completed all emotion challenges. Deliver a final, conclusive, and slightly menacing message to them, remarking on their success and the completion of the game. Address them by their name, ${userName}. Keep it under 30 words.`;
-        const endMessage = await getOpenAIResponse(endPrompt, 60);
+        const endMessage = await getOpenAIResponseWithLogging(endPrompt, 60, 'end_game_message');
+
+        // Update session completion
+        if (currentSessionId) {
+            try {
+                await fetch('http://localhost:3000/api/game-session', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        completed_at: new Date().toISOString(),
+                        emotions_completed: emotionsCompleted,
+                        total_score: emotionsCompleted / EMOTIONS_PER_GAME * 100
+                    })
+                });
+            } catch (error) {
+                console.error('Failed to update session completion:', error);
+            }
+        }
 
         await messagingSystem.playMessage(endMessage || 'The game is over. You have survived.');
 
@@ -592,25 +769,88 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 2000);
     }
 
-    function showPhotoGallery() {
+    async function showPhotoGallery() {
         const gallery = document.getElementById('photoGallery');
         const container = document.getElementById('galleryContainer');
         container.innerHTML = ''; // Clear previous items
 
+        // Create main gallery layout
+        const galleryLayout = document.createElement('div');
+        galleryLayout.className = 'gallery-layout';
+        galleryLayout.style.cssText = `
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            background: #000;
+            color: #fff;
+        `;
+
+        // Create photo section
+        const photoSection = document.createElement('div');
+        photoSection.className = 'photo-section';
+        photoSection.style.cssText = `
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        `;
+
+        const photoTitle = document.createElement('h2');
+        photoTitle.textContent = 'Your Emotion Journey';
+        photoTitle.style.cssText = `
+            text-align: center;
+            margin-bottom: 20px;
+            color: #fff;
+        `;
+        photoSection.appendChild(photoTitle);
+
+        const photoGrid = document.createElement('div');
+        photoGrid.style.cssText = `
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        `;
+
         capturedPhotos.forEach(photo => {
             const item = document.createElement('div');
             item.className = 'gallery-item';
+            item.style.cssText = `
+                background: #333;
+                border-radius: 8px;
+                padding: 10px;
+                text-align: center;
+            `;
 
             const img = document.createElement('img');
             img.src = photo.dataURL;
+            img.style.cssText = `
+                width: 100%;
+                height: 150px;
+                object-fit: cover;
+                border-radius: 4px;
+                margin-bottom: 10px;
+            `;
 
             const label = document.createElement('span');
             label.className = 'label';
             label.textContent = photo.emotion;
+            label.style.cssText = `
+                display: block;
+                font-weight: bold;
+                margin-bottom: 8px;
+                color: #fff;
+            `;
 
             const saveBtn = document.createElement('button');
             saveBtn.className = 'save-btn';
             saveBtn.textContent = 'Save';
+            saveBtn.style.cssText = `
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 5px 15px;
+                border-radius: 4px;
+                cursor: pointer;
+            `;
             saveBtn.onclick = () => {
                 downloadPhoto(photo.dataURL, `${photo.emotion}.jpg`);
             };
@@ -618,8 +858,135 @@ document.addEventListener('DOMContentLoaded', async () => {
             item.appendChild(img);
             item.appendChild(label);
             item.appendChild(saveBtn);
-            container.appendChild(item);
+            photoGrid.appendChild(item);
         });
+
+        photoSection.appendChild(photoGrid);
+
+        // Create conversation section
+        const conversationSection = document.createElement('div');
+        conversationSection.className = 'conversation-section';
+        conversationSection.style.cssText = `
+            flex: 1;
+            padding: 20px;
+            background: #1a1a1a;
+            overflow-y: auto;
+            border-left: 2px solid #333;
+        `;
+
+        const conversationTitle = document.createElement('h2');
+        conversationTitle.textContent = 'Conversation History';
+        conversationTitle.style.cssText = `
+            text-align: center;
+            margin-bottom: 20px;
+            color: #fff;
+        `;
+        conversationSection.appendChild(conversationTitle);
+
+        // Fetch and display conversation history
+        if (currentSessionId) {
+            console.log('📚 Fetching conversation history for session:', currentSessionId);
+            try {
+                const response = await fetch(`http://localhost:3000/api/session-history?session_id=${currentSessionId}`);
+                console.log('📡 Conversation history API response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('📝 Conversation history data:', data);
+                    const messages = data.data.conversation_history;
+                    console.log('💬 Found', messages.length, 'conversation messages');
+
+                    const conversationLog = document.createElement('div');
+                    conversationLog.className = 'conversation-log';
+                    conversationLog.style.cssText = `
+                        display: flex;
+                        flex-direction: column;
+                        gap: 10px;
+                    `;
+
+                    messages.forEach(message => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `message ${message.speaker}`;
+                        messageDiv.style.cssText = `
+                            padding: 10px;
+                            border-radius: 8px;
+                            margin-bottom: 8px;
+                            ${message.speaker === 'bot' ? 
+                                'background: #2d5a87; margin-right: 20px;' : 
+                                'background: #4a4a4a; margin-left: 20px;'
+                            }
+                        `;
+
+                        const header = document.createElement('div');
+                        header.style.cssText = `
+                            font-size: 12px;
+                            color: #ccc;
+                            margin-bottom: 5px;
+                        `;
+                        
+                        const timestamp = new Date(message.timestamp).toLocaleTimeString();
+                        const messageTypeLabel = message.message_type.replace('_', ' ').toUpperCase();
+                        header.textContent = `${message.speaker.toUpperCase()} - ${messageTypeLabel} (${timestamp})`;
+
+                        const content = document.createElement('div');
+                        content.style.cssText = `
+                            color: #fff;
+                            line-height: 1.4;
+                        `;
+                        content.textContent = message.content;
+
+                        // Add timing info for player attempts
+                        if (message.metadata && message.metadata.timing) {
+                            const timingInfo = document.createElement('div');
+                            timingInfo.style.cssText = `
+                                font-size: 11px;
+                                color: #999;
+                                margin-top: 5px;
+                            `;
+                            const duration = (message.metadata.timing.attempt_duration / 1000).toFixed(1);
+                            timingInfo.textContent = `Duration: ${duration}s`;
+                            messageDiv.appendChild(timingInfo);
+                        }
+
+                        messageDiv.appendChild(header);
+                        messageDiv.appendChild(content);
+                        conversationLog.appendChild(messageDiv);
+                    });
+
+                    conversationSection.appendChild(conversationLog);
+                } else {
+                    const errorData = await response.json();
+                    console.error('❌ Failed to fetch conversation history:', response.status, errorData);
+                    
+                    // Show error message in conversation section
+                    const errorMsg = document.createElement('div');
+                    errorMsg.style.cssText = 'color: #ff6b6b; text-align: center; padding: 20px;';
+                    errorMsg.textContent = `Failed to load conversation history (Status: ${response.status})`;
+                    conversationSection.appendChild(errorMsg);
+                }
+            } catch (error) {
+                console.error('❌ Error fetching conversation history:', error);
+                
+                // Show error message in conversation section
+                const errorMsg = document.createElement('div');
+                errorMsg.style.cssText = 'color: #ff6b6b; text-align: center; padding: 20px;';
+                errorMsg.textContent = `Error loading conversation history: ${error.message}`;
+                conversationSection.appendChild(errorMsg);
+            }
+        } else {
+            console.warn('⚠️ No session ID available for fetching conversation history');
+            
+            // Show no session message
+            const noSessionMsg = document.createElement('div');
+            noSessionMsg.style.cssText = 'color: #ffa726; text-align: center; padding: 20px;';
+            noSessionMsg.textContent = 'No session data available for conversation history';
+            conversationSection.appendChild(noSessionMsg);
+        }
+
+        // Add both sections to layout
+        galleryLayout.appendChild(photoSection);
+        galleryLayout.appendChild(conversationSection);
+        container.appendChild(galleryLayout);
 
         gallery.style.display = 'flex';
     }

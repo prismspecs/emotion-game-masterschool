@@ -65,6 +65,19 @@ async function createTables() {
         );
     `);
 
+    // Create conversation_messages table for complete chat history
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS conversation_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id INTEGER REFERENCES game_sessions(id),
+            message_type TEXT NOT NULL, -- 'bot_message', 'player_attempt', 'system_message'
+            speaker TEXT NOT NULL, -- 'bot', 'player', 'system'
+            content TEXT NOT NULL,
+            metadata TEXT, -- JSON: attempt_data, timing_info, etc.
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+
     console.log('Database tables created successfully');
 }
 
@@ -246,6 +259,70 @@ async function getAnalyticsData(userName = null) {
     };
 }
 
+/**
+ * Add a conversation message to the log
+ */
+async function addConversationMessage(sessionId, messageType, speaker, content, metadata = null) {
+    const database = getDatabase();
+    const result = await database.run(`
+        INSERT INTO conversation_messages (
+            session_id, message_type, speaker, content, metadata
+        ) VALUES (?, ?, ?, ?, ?)
+    `, [
+        sessionId, 
+        messageType, 
+        speaker, 
+        content, 
+        metadata ? JSON.stringify(metadata) : null
+    ]);
+
+    return result.lastID;
+}
+
+/**
+ * Get conversation history for a session
+ */
+async function getConversationHistory(sessionId) {
+    const database = getDatabase();
+    const messages = await database.all(
+        'SELECT * FROM conversation_messages WHERE session_id = ? ORDER BY timestamp ASC',
+        [sessionId]
+    );
+
+    return messages.map(message => ({
+        ...message,
+        metadata: message.metadata ? JSON.parse(message.metadata) : null
+    }));
+}
+
+/**
+ * Get complete session data including conversation history and photos
+ */
+async function getCompleteSessionData(sessionId) {
+    const database = getDatabase();
+    
+    // Get session info
+    const session = await getGameSession(sessionId);
+    
+    // Get conversation history
+    const conversation = await getConversationHistory(sessionId);
+    
+    // Get emotion attempts with photos
+    const attempts = await getSessionEmotionAttempts(sessionId);
+    
+    return {
+        session,
+        conversation,
+        attempts,
+        photos: attempts.filter(attempt => attempt.photo_data).map(attempt => ({
+            emotion: attempt.target_emotion,
+            dataURL: attempt.photo_data,
+            confidence: attempt.confidence_score,
+            timestamp: attempt.timestamp
+        }))
+    };
+}
+
 export {
     initializeDatabase,
     getDatabase,
@@ -255,5 +332,8 @@ export {
     getGameSession,
     getUserGameHistory,
     getSessionEmotionAttempts,
-    getAnalyticsData
+    getAnalyticsData,
+    addConversationMessage,
+    getConversationHistory,
+    getCompleteSessionData
 }; 

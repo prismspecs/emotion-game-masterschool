@@ -7,7 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 // Import our custom modules
 import {
     initializeDatabase, createGameSession, updateGameSession, createEmotionAttempt,
-    getGameSession, getUserGameHistory, getAnalyticsData
+    getGameSession, getUserGameHistory, getAnalyticsData, addConversationMessage,
+    getConversationHistory, getCompleteSessionData
 } from './db/database.js';
 import {
     validateRequest, gameSessionSchema, emotionFeedbackSchema,
@@ -69,6 +70,46 @@ app.post('/api/game-session', validateRequest(gameSessionSchema), async (req, re
         console.error('Error creating game session:', error);
         res.status(500).json(
             createErrorResponse('Failed to create game session', 'INTERNAL_ERROR')
+        );
+    }
+});
+
+/**
+ * PATCH /api/game-session - Update game session
+ */
+app.patch('/api/game-session', async (req, res) => {
+    try {
+        const { session_id, completed_at, emotions_completed, total_score } = req.body;
+
+        if (!session_id) {
+            return res.status(400).json(
+                createErrorResponse('session_id is required', 'MISSING_SESSION_ID')
+            );
+        }
+
+        // Validate session exists
+        const sessionExists = await validateSessionExists(session_id);
+        if (!sessionExists) {
+            return res.status(404).json(
+                createErrorResponse('Session not found', 'SESSION_NOT_FOUND')
+            );
+        }
+
+        // Update session
+        await updateGameSession(session_id, {
+            completed_at,
+            emotions_completed,
+            total_score
+        });
+
+        res.json(createSuccessResponse({
+            session_id,
+            updated_at: new Date().toISOString()
+        }));
+    } catch (error) {
+        console.error('Error updating game session:', error);
+        res.status(500).json(
+            createErrorResponse('Failed to update game session', 'INTERNAL_ERROR')
         );
     }
 });
@@ -276,6 +317,101 @@ app.post('/api/openai', async (req, res) => {
 });
 
 /**
+ * GET /api/session-history - Get complete session history with conversation and photos
+ */
+app.get('/api/session-history', async (req, res) => {
+    try {
+        const { session_id } = req.query;
+
+        if (!session_id) {
+            return res.status(400).json(
+                createErrorResponse('session_id is required', 'MISSING_SESSION_ID')
+            );
+        }
+
+        // Validate session exists
+        const sessionExists = await validateSessionExists(session_id);
+        if (!sessionExists) {
+            return res.status(404).json(
+                createErrorResponse('Session not found', 'SESSION_NOT_FOUND')
+            );
+        }
+
+        // Get complete session data
+        const sessionData = await getCompleteSessionData(session_id);
+
+        const response = createSuccessResponse({
+            session_info: sessionData.session,
+            conversation_history: sessionData.conversation,
+            emotion_attempts: sessionData.attempts,
+            photos: sessionData.photos,
+            summary: {
+                total_messages: sessionData.conversation.length,
+                total_attempts: sessionData.attempts.length,
+                total_photos: sessionData.photos.length,
+                session_duration: sessionData.session.completed_at ? 
+                    new Date(sessionData.session.completed_at) - new Date(sessionData.session.started_at) : null
+            }
+        });
+
+        res.json(response);
+    } catch (error) {
+        console.error('Error retrieving session history:', error);
+        res.status(500).json(
+            createErrorResponse('Failed to retrieve session history', 'INTERNAL_ERROR')
+        );
+    }
+});
+
+/**
+ * POST /api/conversation-message - Add a message to conversation history
+ */
+app.post('/api/conversation-message', async (req, res) => {
+    try {
+        const { 
+            session_id, 
+            message_type, 
+            speaker, 
+            content, 
+            metadata 
+        } = req.body;
+
+        if (!session_id || !message_type || !speaker || !content) {
+            return res.status(400).json(
+                createErrorResponse('session_id, message_type, speaker, and content are required', 'MISSING_FIELDS')
+            );
+        }
+
+        // Validate session exists
+        const sessionExists = await validateSessionExists(session_id);
+        if (!sessionExists) {
+            return res.status(404).json(
+                createErrorResponse('Session not found', 'SESSION_NOT_FOUND')
+            );
+        }
+
+        // Add message to conversation log
+        const messageId = await addConversationMessage(
+            session_id, 
+            message_type, 
+            speaker, 
+            content, 
+            metadata
+        );
+
+        res.status(201).json(createSuccessResponse({
+            message_id: messageId,
+            logged_at: new Date().toISOString()
+        }));
+    } catch (error) {
+        console.error('Error logging conversation message:', error);
+        res.status(500).json(
+            createErrorResponse('Failed to log conversation message', 'INTERNAL_ERROR')
+        );
+    }
+});
+
+/**
  * POST /api/structured-coaching - Get structured coaching response
  * Demonstrates OpenAI structured output with JSON schema validation
  */
@@ -405,6 +541,8 @@ async function startServer() {
             console.log('  POST /api/emotion-feedback - Submit emotion feedback');
             console.log('  GET  /api/game-history - Get user game history');
             console.log('  GET  /api/analytics - Get comparative analytics');
+            console.log('  GET  /api/session-history - Get complete session history with conversation');
+            console.log('  POST /api/conversation-message - Add message to conversation log');
             console.log('  POST /api/openai - Legacy OpenAI endpoint');
             console.log('  POST /api/structured-coaching - Get structured coaching response');
         });
