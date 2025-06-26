@@ -443,30 +443,67 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
     }
 
     /**
-     * Call OpenAI API (legacy unstructured method)
+     * Call OpenAI API (legacy unstructured method) with retry logic
      */
-    async callOpenAI(prompt, maxTokens = 100) {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-            },
-            body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                messages: [{ role: 'user', content: prompt }],
-                max_tokens: maxTokens,
-                temperature: 0.8
-            })
-        });
+    async callOpenAI(prompt, maxTokens = 100, retryCount = 0) {
+        const maxRetries = 3;
+        const baseDelay = 1000; // 1 second
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(`OpenAI API Error: ${JSON.stringify(errorData)}`);
+        try {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: maxTokens,
+                    temperature: 0.8
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                
+                // Check if it's a rate limit error
+                if (response.status === 429 && retryCount < maxRetries) {
+                    const rateLimitError = errorData.error;
+                    console.log(`⏳ Rate limit hit (attempt ${retryCount + 1}/${maxRetries + 1}). Retrying...`);
+                    
+                    // Extract wait time from error message if available
+                    let waitTime = baseDelay * Math.pow(2, retryCount); // Exponential backoff
+                    const waitMatch = rateLimitError.message.match(/try again in (\d+)s/);
+                    if (waitMatch) {
+                        waitTime = Math.max(waitTime, parseInt(waitMatch[1]) * 1000);
+                    }
+                    
+                    console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                    
+                    return this.callOpenAI(prompt, maxTokens, retryCount + 1);
+                }
+                
+                // If it's not a rate limit or we've exhausted retries, throw error
+                console.error('OpenAI API Error:', errorData);
+                throw new Error(`OpenAI API Error: ${JSON.stringify(errorData)}`);
+            }
+
+            const data = await response.json();
+            return data.choices[0].message.content.trim();
+            
+        } catch (error) {
+            if (error.message.includes('fetch') && retryCount < maxRetries) {
+                // Network error, retry with exponential backoff
+                const waitTime = baseDelay * Math.pow(2, retryCount);
+                console.log(`🌐 Network error (attempt ${retryCount + 1}/${maxRetries + 1}). Retrying in ${waitTime}ms...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+                return this.callOpenAI(prompt, maxTokens, retryCount + 1);
+            }
+            
+            throw error; // Re-throw if not retryable or out of retries
         }
-
-        const data = await response.json();
-        return data.choices[0].message.content.trim();
     }
 
     /**
@@ -483,6 +520,61 @@ Provide coaching feedback that is ${strategy?.tone || 'supportive'} and uses ${s
         };
 
         return messages[target] || "Keep practicing! You're getting better at expressing emotions.";
+    }
+
+    /**
+     * Get fallback welcome message
+     */
+    getFallbackWelcome(userName) {
+        const welcomes = [
+            `Welcome to the Emotion Game, ${userName}! Let's explore your emotional range together.`,
+            `Hello ${userName}! Ready to test your facial expression skills?`,
+            `${userName}, welcome! Time to master the art of emotional expression.`,
+            `Greetings ${userName}! Let's see how well you can convey emotions with your face.`
+        ];
+        return welcomes[Math.floor(Math.random() * welcomes.length)];
+    }
+
+    /**
+     * Get fallback success message
+     */
+    getFallbackSuccess(emotion, timeSeconds) {
+        const messages = [
+            `Excellent work expressing ${emotion}!`,
+            `Great job with that ${emotion} expression!`,
+            `Well done! You nailed the ${emotion} emotion.`,
+            `Perfect ${emotion} expression! Moving on to the next challenge.`
+        ];
+        return messages[Math.floor(Math.random() * messages.length)];
+    }
+
+    /**
+     * Get fallback challenge announcement
+     */
+    getFallbackChallenge(emotion, isFirst) {
+        if (isFirst) {
+            return `Let's begin! Your first challenge: express ${emotion}!`;
+        }
+        const announcements = [
+            `Your next challenge: ${emotion}!`,
+            `Now try expressing: ${emotion}!`,
+            `Time for ${emotion}! Show me your best expression.`,
+            `Challenge time: ${emotion}!`
+        ];
+        return announcements[Math.floor(Math.random() * announcements.length)];
+    }
+
+    /**
+     * Get fallback end game message
+     */
+    getFallbackEndGame(userName) {
+        const endings = [
+            `Congratulations ${userName}! You've completed all the emotion challenges.`,
+            `Well done ${userName}! You've mastered all the required emotions.`,
+            `Excellent work ${userName}! The emotion game is complete.`,
+            `${userName}, you've successfully conquered every emotion challenge!`
+        ];
+        return endings[Math.floor(Math.random() * endings.length)];
     }
 
     /**

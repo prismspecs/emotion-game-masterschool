@@ -51,11 +51,17 @@ app.post('/api/game-session', validateRequest(gameSessionSchema), async (req, re
 
         const sessionId = await createGameSession(user_name);
 
-        // Generate welcome message using AI service
-        const welcomeMessage = await aiService.callOpenAI(
-            `As a ${coaching_preference} emotion coach, welcome ${user_name} to the Emotion Detection Game. Keep it brief and encouraging (under 50 words).`,
-            60
-        );
+        // Generate welcome message using AI service with fallback
+        let welcomeMessage;
+        try {
+            welcomeMessage = await aiService.callOpenAI(
+                `As a ${coaching_preference} emotion coach, welcome ${user_name} to the Emotion Detection Game. Keep it brief and encouraging (under 50 words).`,
+                60
+            );
+        } catch (error) {
+            console.warn('OpenAI API failed for welcome message, using fallback:', error.message);
+            welcomeMessage = aiService.getFallbackWelcome(user_name);
+        }
 
         const response = createSuccessResponse({
             session_id: sessionId,
@@ -302,16 +308,38 @@ app.post('/api/openai', async (req, res) => {
             );
         }
 
-        const response = await aiService.callOpenAI(prompt, 50);
+        let response;
+        try {
+            response = await aiService.callOpenAI(prompt, 50);
+        } catch (error) {
+            console.warn('OpenAI API failed, using fallback response:', error.message);
+            
+            // Determine fallback based on prompt content
+            const promptLower = prompt.toLowerCase();
+            if (promptLower.includes('welcome') || promptLower.includes('greeting')) {
+                response = 'Welcome to the Emotion Game! Ready to test your emotional expression skills?';
+            } else if (promptLower.includes('succeeded') || promptLower.includes('expressing')) {
+                response = 'Great job! Well done expressing that emotion.';
+            } else if (promptLower.includes('challenge') || promptLower.includes('express the emotion')) {
+                response = 'Here\'s your next challenge! Show me your best expression.';
+            } else if (promptLower.includes('coaching') || promptLower.includes('tip') || promptLower.includes('adjust')) {
+                response = 'Keep practicing! Focus on making your expression clearer and more pronounced.';
+            } else if (promptLower.includes('final') || promptLower.includes('complete') || promptLower.includes('conquered')) {
+                response = 'Congratulations! You\'ve completed the emotion game successfully.';
+            } else {
+                response = 'The game continues! Keep expressing those emotions.';
+            }
+        }
 
         res.json(createSuccessResponse({
             response,
-            model: 'gpt-4o-mini'
+            model: 'gpt-4o-mini',
+            fallback_used: !response.includes('OpenAI') // Indicate if fallback was used
         }));
     } catch (error) {
-        console.error('Error calling OpenAI:', error);
+        console.error('Error in OpenAI endpoint:', error);
         res.status(500).json(
-            createErrorResponse('OpenAI request failed', 'OPENAI_ERROR')
+            createErrorResponse('Request processing failed', 'INTERNAL_ERROR')
         );
     }
 });

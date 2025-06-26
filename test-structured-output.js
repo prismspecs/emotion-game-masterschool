@@ -8,7 +8,7 @@ import fetch from 'node-fetch';
 const API_BASE = 'http://localhost:3000';
 
 async function testStructuredOutput() {
-    console.log('🧪 Testing OpenAI Structured Output...\n');
+    console.log('Testing OpenAI Structured Output...\n');
 
     const testCases = [
         {
@@ -33,7 +33,7 @@ async function testStructuredOutput() {
 
     for (let i = 0; i < testCases.length; i++) {
         const testCase = testCases[i];
-        console.log(`📝 Test Case ${i + 1}:`);
+        console.log(`Test Case ${i + 1}:`);
         console.log(`   Target: ${testCase.target_emotion}`);
         console.log(`   Detected: ${testCase.detected_emotion}`);
         console.log(`   Confidence: ${testCase.confidence_score}%`);
@@ -50,7 +50,7 @@ async function testStructuredOutput() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                console.error(`❌ Error: ${errorData.error?.message || 'Unknown error'}\n`);
+                console.error(`Error: ${errorData.error?.message || 'Unknown error'}\n`);
                 continue;
             }
 
@@ -58,7 +58,7 @@ async function testStructuredOutput() {
             
             if (data.success && data.data.structured_coaching) {
                 const coaching = data.data.structured_coaching;
-                console.log('✅ Structured Response:');
+                console.log('Structured Response:');
                 console.log(`   Message: ${coaching.coaching_message}`);
                 console.log(`   Confidence Level: ${coaching.confidence_level}`);
                 console.log(`   Encouragement Level: ${coaching.encouragement_level}`);
@@ -68,21 +68,21 @@ async function testStructuredOutput() {
                 console.log(`   Response Format: ${data.data.metadata.response_format}`);
                 console.log(`   Model: ${data.data.metadata.model}\n`);
             } else {
-                console.error('❌ Unexpected response format\n');
+                console.error('Unexpected response format\n');
             }
         } catch (error) {
-            console.error(`❌ Network error: ${error.message}\n`);
+            console.error(`Network error: ${error.message}\n`);
         }
     }
 
-    console.log('🎯 Structured Output Test Complete!');
+    console.log('Structured Output Test Complete!');
     console.log('\nKey Features Demonstrated:');
-    console.log('✅ OpenAI response_format: { "type": "json_schema" }');
-    console.log('✅ Strict JSON schema validation with strict: true');
-    console.log('✅ Consistent response structure');
-    console.log('✅ Enum value enforcement');
-    console.log('✅ Required field validation');
-    console.log('✅ additionalProperties: false enforcement');
+    console.log('OpenAI response_format: { "type": "json_schema" }');
+    console.log('Strict JSON schema validation with strict: true');
+    console.log('Consistent response structure');
+    console.log('Enum value enforcement');
+    console.log('Required field validation');
+    console.log('additionalProperties: false enforcement');
 }
 
 // Run the test

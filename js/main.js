@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize conversation logging
     async function initializeSession(userName) {
-        console.log('🚀 Initializing session for user:', userName);
+        console.log('Initializing session for user:', userName);
         try {
             const response = await fetch('http://localhost:3000/api/game-session', {
                 method: 'POST',
@@ -43,11 +43,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 })
             });
 
-            console.log('📡 Session API response status:', response.status);
+            console.log('Session API response status:', response.status);
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-                console.error('❌ Session creation failed:', errorData);
+                console.error('Session creation failed:', errorData);
                 throw new Error(`Failed to create session: ${response.status}`);
             }
 
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentSessionId = data.data.session_id;
             gameStartTime = new Date();
             
-            console.log('✅ Session created successfully:', {
+            console.log('Session created successfully:', {
                 sessionId: currentSessionId,
                 userName: userName,
                 welcomeMessage: data.data.welcome_message?.substring(0, 50) + '...'
@@ -63,15 +63,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Verify that sessionId was actually set
             if (!currentSessionId) {
-                console.error('❌ Session ID is null or undefined after successful API response:', data);
+                console.error('Session ID is null or undefined after successful API response:', data);
                 throw new Error('Session ID not returned from server');
             }
             
             return data.data.welcome_message;
         } catch (error) {
-            console.error('❌ Failed to initialize session:', error);
+            console.error('Failed to initialize session:', error);
             // Set a fallback session ID so the game can continue with local logging
-            console.warn('⚠️ Creating fallback session for local operation');
+            console.warn('Creating fallback session for local operation');
             currentSessionId = `fallback_${Date.now()}`;
             gameStartTime = new Date();
             return null;
@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return;
         }
 
-        console.log('🗣️ Logging conversation message:', {
+        console.log('Logging conversation message:', {
             session_id: currentSessionId,
             messageType,
             speaker,
@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             metadata
         };
         conversationHistory.push(localMessage);
-        console.log('💾 Stored message locally. Total messages:', conversationHistory.length);
+        console.log('Stored message locally. Total messages:', conversationHistory.length);
 
         // Try to send to server if not using fallback session
         if (!String(currentSessionId).startsWith('fallback_')) {
@@ -123,17 +123,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 if (!response.ok) {
                     const errorData = await response.json();
-                    console.error('❌ Failed to log conversation message to server:', errorData);
+                    console.error('Failed to log conversation message to server:', errorData);
                     return;
                 }
 
                 const result = await response.json();
-                console.log('✅ Message logged successfully to server:', result);
+                console.log('Message logged successfully to server:', result);
             } catch (error) {
-                console.error('❌ Failed to log conversation message to server:', error);
+                console.error('Failed to log conversation message to server:', error);
             }
         } else {
-            console.log('📝 Using fallback session - message stored locally only');
+            console.log('Using fallback session - message stored locally only');
         }
     }
 
@@ -164,13 +164,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Enhanced messaging function that logs bot responses
     async function getOpenAIResponseWithLogging(prompt, maxTokens, messageType = 'bot_message') {
         const requestSequence = getNextMessageSequence();
-        console.log(`🎯 Making OpenAI request with sequence ${requestSequence} for ${messageType}`);
+        console.log(`Making OpenAI request with sequence ${requestSequence} for ${messageType}`);
         
         const response = await getOpenAIResponse(prompt, maxTokens);
         
         // Check if this response is still valid (sequence hasn't been invalidated)
         if (requestSequence < currentMessageSequence) {
-            console.log(`🚫 Discarding stale OpenAI response (sequence ${requestSequence} < current ${currentMessageSequence}) for ${messageType}`);
+            console.log(`Discarding stale OpenAI response (sequence ${requestSequence} < current ${currentMessageSequence}) for ${messageType}`);
             return null; // Discard stale response
         }
         
@@ -204,14 +204,36 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!response.ok) {
                 const errorData = await response.json();
                 console.error('API Error:', errorData);
+                
+                // Check if it's a rate limit error for user feedback
+                if (response.status === 429) {
+                    console.warn('Rate limit hit - the AI is taking a short break. Using backup responses.');
+                } else if (response.status >= 500) {
+                    console.warn('Server error - using backup responses to keep the game running.');
+                }
+                
                 throw new Error(`API request failed with status ${response.status}`);
             }
 
             const data = await response.json();
+            
+            // Log if fallback was used
+            if (data.data.fallback_used) {
+                console.log('Using backup response due to API limitations');
+            }
+            
             // The server returns { success: true, data: { response: "...", model: "..." } }
             return data.data.response;
         } catch (error) {
             console.error('Failed to fetch OpenAI response:', error);
+            
+            // Show user-friendly message for common errors
+            if (error.message.includes('429')) {
+                console.log('AI services are busy - using backup messages to keep the game flowing smoothly.');
+            } else if (error.message.includes('500')) {
+                console.log('Using backup responses to ensure uninterrupted gameplay.');
+            }
+            
             return null; // Return null on error
         }
     }
@@ -257,7 +279,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return ++currentMessageSequence;
     }
     function invalidateCurrentSequence() {
-        console.log(`🔄 Invalidating message sequence ${currentMessageSequence}, moving to ${currentMessageSequence + 1}`);
+        console.log(`Invalidating message sequence ${currentMessageSequence}, moving to ${currentMessageSequence + 1}`);
         currentMessageSequence++;
         return currentMessageSequence;
     }
@@ -532,7 +554,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             // Periodic detection health check (only in debug mode)
             if (DEBUG_MODE && Math.random() < 0.05) { // 5% chance to log detection info when debugging
-                console.log(`👁️ DETECTION HEALTH: ${detections.length} faces detected, game mode: ${GAME_MODE}`);
+                console.log(`DETECTION HEALTH: ${detections.length} faces detected, game mode: ${GAME_MODE}`);
             }
 
             if (GAME_MODE == "game" && targetEmotion && !targetEmotionSelected) {
@@ -541,8 +563,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 // Add periodic debugging for stuck emotions (only in debug mode)
                 if (DEBUG_MODE && Math.random() < 0.1) { // 10% chance to log debug info when debugging
-                    console.log(`🎭 EMOTION DEBUG: target="${targetEmotion}", match=${matchPercentage.toFixed(1)}%, selected=${targetEmotionSelected}, holdStart=${emotionHoldStartTime}`);
-                    console.log(`🎭 All emotions:`, Object.keys(emotions).map(e => `${e}:${(emotions[e]*100).toFixed(1)}%`).join(', '));
+                    console.log(`EMOTION DEBUG: target="${targetEmotion}", match=${matchPercentage.toFixed(1)}%, selected=${targetEmotionSelected}, holdStart=${emotionHoldStartTime}`);
+                    console.log(`All emotions:`, Object.keys(emotions).map(e => `${e}:${(emotions[e]*100).toFixed(1)}%`).join(', '));
                 }
 
                 // Check if matchPercentage is above the threshold
@@ -595,20 +617,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (congratsMessage) {
                 await messagingSystem.playMessage(congratsMessage);
             } else {
-                console.log('⏩ Using fallback success message due to stale/missing response');
+                                            console.log('Using fallback success message due to stale/missing response');
                 await messagingSystem.playMessage('Well done!');
             }
 
                             emotionsCompleted++;
                             usedEmotions.push(targetEmotion);
 
-                            console.log(`\x1b[31m\x1b[1m☭ EMOTION CONQUERED: "${targetEmotion}" ☭\x1b[0m Count: ${emotionsCompleted}/${EMOTIONS_PER_GAME} | Used: [${usedEmotions.join(', ')}]`);
+                            console.log(`EMOTION CONQUERED: "${targetEmotion}" Count: ${emotionsCompleted}/${EMOTIONS_PER_GAME} | Used: [${usedEmotions.join(', ')}]`);
 
                             if (emotionsCompleted >= EMOTIONS_PER_GAME) {
-                                console.log(`\x1b[32m\x1b[1m🏆 VICTORY CONDITIONS MET! 🏆\x1b[0m Game ending with ${emotionsCompleted}/${EMOTIONS_PER_GAME} emotions!`);
+                                console.log(`VICTORY CONDITIONS MET! Game ending with ${emotionsCompleted}/${EMOTIONS_PER_GAME} emotions!`);
                                 runEnd();
                             } else {
-                                console.log(`\x1b[33m\x1b[1m⚡ ADVANCING TO NEXT TARGET ⚡\x1b[0m Progress: ${emotionsCompleted}/${EMOTIONS_PER_GAME}`);
+                                console.log(`ADVANCING TO NEXT TARGET Progress: ${emotionsCompleted}/${EMOTIONS_PER_GAME}`);
                                 // A brief pause before selecting and announcing the next one.
                                 await new Promise(resolve => setTimeout(resolve, 1500));
                                 await selectNewTargetEmotion();
@@ -653,9 +675,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if (coachingMessage && GAME_MODE === "game") {
                             await messagingSystem.playMessage(coachingMessage);
                         } else if (!coachingMessage) {
-                            console.log('⏩ Skipping coaching message due to stale/missing response');
+                            console.log('Skipping coaching message due to stale/missing response');
                         } else {
-                            console.log('⏩ Skipping coaching message - game mode changed');
+                            console.log('Skipping coaching message - game mode changed');
                         }
 
                         isCoachingActive = false;
@@ -668,11 +690,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function selectNewTargetEmotion() {
-        console.log(`\x1b[36m\x1b[1m🎯 TARGET SELECTION INITIATED 🎯\x1b[0m Used: [${usedEmotions.join(', ')}] | Completed: ${emotionsCompleted}`);
+        console.log(`TARGET SELECTION INITIATED Used: [${usedEmotions.join(', ')}] | Completed: ${emotionsCompleted}`);
         const availableEmotions = PLAYABLE_EMOTIONS.filter(emotion => !usedEmotions.includes(emotion));
-        console.log(`\x1b[35m\x1b[1m🎲 EMOTION POOL: [${availableEmotions.join(', ')}] 🎲\x1b[0m`);
+        console.log(`EMOTION POOL: [${availableEmotions.join(', ')}]`);
         targetEmotion = availableEmotions[Math.floor(Math.random() * availableEmotions.length)];
-        console.log(`\x1b[91m\x1b[1m🔥 NEW TARGET LOCKED: "${targetEmotion}" 🔥\x1b[0m`);
+        console.log(`NEW TARGET LOCKED: "${targetEmotion}"`);
 
         // Update UI and state *immediately* so the game can proceed
         // even if the announcement has issues.
@@ -685,7 +707,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         lastCoachingTime = performance.now(); // Reset coaching timer for a grace period
         readout.style.display = 'block';
         
-        console.log(`🔧 STATE RESET: targetEmotion="${targetEmotion}", targetEmotionSelected=${targetEmotionSelected}, emotionHoldStartTime=${emotionHoldStartTime}`);
+        console.log(`STATE RESET: targetEmotion="${targetEmotion}", targetEmotionSelected=${targetEmotionSelected}, emotionHoldStartTime=${emotionHoldStartTime}`);
 
         // Announce the new emotion
         let announcementPrompt;
@@ -700,7 +722,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (announcementMessage) {
             await messagingSystem.playMessage(announcementMessage);
         } else {
-            console.log('⏩ Using fallback announcement message due to stale/missing response');
+            console.log('Using fallback announcement message due to stale/missing response');
             await messagingSystem.playMessage(`Now try: ${targetEmotion}`);
         }
 
@@ -730,11 +752,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Test if TTS is working
         const ttsWorking = await messagingSystem.testSpeechSynthesis();
         if (!ttsWorking) {
-            console.warn('⚠️ TTS test failed - audio may not work properly');
+            console.warn('TTS test failed - audio may not work properly');
             messagingSystem.setLoadingMessage('Audio test failed - continuing with text-only mode');
             await new Promise(resolve => setTimeout(resolve, 2000));
         } else {
-            console.log('✅ TTS test passed - audio should work');
+            console.log('TTS test passed - audio should work');
         }
 
         messagingSystem.setLoadingMessage('Loading...');
@@ -759,7 +781,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const greeting = await initializeSession(userName);
 
         if (greeting) {
-            console.log('✅ Session initialized successfully, currentSessionId:', currentSessionId);
+            console.log('Session initialized successfully, currentSessionId:', currentSessionId);
             // Log and play greeting message
             await logConversationMessage('welcome_message', 'bot', greeting, {
                 user_name: userName,
@@ -767,7 +789,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             await messagingSystem.playMessage(greeting);
         } else {
-            console.warn('⚠️ Session initialization failed, currentSessionId:', currentSessionId);
+            console.warn('Session initialization failed, currentSessionId:', currentSessionId);
             // Fallback if greeting fails
             const fallbackGreeting = `Welcome to the Emotion Game, ${userName}!`;
             await logConversationMessage('welcome_message', 'bot', fallbackGreeting, {
@@ -791,13 +813,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function showNextMessage() {
         // Check if tutorial was skipped (game mode changed)
         if (GAME_MODE !== "tutorial") {
-            console.log('⏩ Tutorial was skipped, stopping showNextMessage');
+            console.log('Tutorial was skipped, stopping showNextMessage');
             return;
         }
 
         if (currentTutorialIndex >= tutorialMessages.length) {
             // All messages are done, or the tutorial was skipped. Start the game.
-            console.log('📚 Tutorial completed naturally, starting game');
+            console.log('Tutorial completed naturally, starting game');
             runGame();
             return;
         }
@@ -805,7 +827,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentMessage = tutorialMessages[currentTutorialIndex];
         currentTutorialIndex++;
 
-        console.log(`📚 Playing tutorial message ${currentTutorialIndex}/${tutorialMessages.length}: ${currentMessage.substring(0, 30)}...`);
+        console.log(`Playing tutorial message ${currentTutorialIndex}/${tutorialMessages.length}: ${currentMessage.substring(0, 30)}...`);
 
         // Log tutorial message
         await logConversationMessage('tutorial_message', 'bot', currentMessage, {
@@ -817,17 +839,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (GAME_MODE === "tutorial") {
             await messagingSystem.playMessage(currentMessage);
         } else {
-            console.log('⏩ Skipping tutorial message playback - tutorial was skipped');
+            console.log('Skipping tutorial message playback - tutorial was skipped');
             return;
         }
 
         // After the message has played, check if tutorial is still active and we should continue
         if (GAME_MODE === "tutorial" && currentTutorialIndex < tutorialMessages.length) {
-            console.log(`📚 Scheduling next tutorial message in 1 second`);
+            console.log(`Scheduling next tutorial message in 1 second`);
             tutorialTimeoutId = setTimeout(showNextMessage, 1000);
         } else if (GAME_MODE === "tutorial") {
             // We've finished the last message and tutorial is still active
-            console.log('📚 Tutorial completed, starting game');
+            console.log('Tutorial completed, starting game');
             runGame();
         }
         // If GAME_MODE is no longer "tutorial", we were skipped and should do nothing
@@ -845,7 +867,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function runEnd() {
-        console.log(`\x1b[37m\x1b[40m\x1b[1m💀 GAME TERMINATION SEQUENCE ACTIVATED 💀\x1b[0m Final Score: ${emotionsCompleted} | Conquered: [${usedEmotions.join(', ')}]`);
+        console.log(`GAME TERMINATION SEQUENCE ACTIVATED Final Score: ${emotionsCompleted} | Conquered: [${usedEmotions.join(', ')}]`);
         readout.style.display = 'none';
         GAME_MODE = "end";
 
@@ -874,48 +896,48 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (endMessage && GAME_MODE === "end") {
             await messagingSystem.playMessage(endMessage);
         } else if (GAME_MODE === "end") {
-            console.log('⏩ Using fallback end message due to stale/missing response');
+            console.log('Using fallback end message due to stale/missing response');
             await messagingSystem.playMessage('The game is over. You have survived.');
         } else {
-            console.log('⏩ Skipping end message - game mode changed');
+            console.log('Skipping end message - game mode changed');
         }
 
         // Fade the screen to black after the final message
         setTimeout(() => {
-            console.log('🎬 Starting fade to black...');
+            console.log('Starting fade to black...');
             const fadeOverlay = document.getElementById('fadeOverlay');
-            console.log('🎬 fadeOverlay element:', fadeOverlay);
+            console.log('fadeOverlay element:', fadeOverlay);
             if (fadeOverlay) {
-                console.log('🎬 Applying fade transition...');
+                console.log('Applying fade transition...');
                 fadeOverlay.style.transition = 'opacity 2s ease-in-out';
                 fadeOverlay.style.opacity = '1';
                 // After fade is complete, show the gallery
-                console.log('🎬 Scheduling gallery display in 2 seconds...');
+                console.log('Scheduling gallery display in 2 seconds...');
                 setTimeout(() => {
-                    console.log('🎬 About to show photo gallery...');
+                    console.log('About to show photo gallery...');
                     showPhotoGallery();
                 }, 2000);
             } else {
-                console.error('❌ fadeOverlay element not found, showing gallery directly');
+                console.error('fadeOverlay element not found, showing gallery directly');
                 showPhotoGallery();
             }
         }, 2000);
     }
 
     async function showPhotoGallery() {
-        console.log('🎨 showPhotoGallery() called');
+        console.log('showPhotoGallery() called');
         const gallery = document.getElementById('photoGallery');
         const container = document.getElementById('galleryContainer');
-        console.log('🎨 Gallery element:', gallery);
-        console.log('🎨 Container element:', container);
+        console.log('Gallery element:', gallery);
+        console.log('Container element:', container);
         
         if (!gallery) {
-            console.error('❌ photoGallery element not found!');
+            console.error('photoGallery element not found!');
             return;
         }
         
         if (!container) {
-            console.error('❌ galleryContainer element not found!');
+            console.error('galleryContainer element not found!');
             return;
         }
         
@@ -957,8 +979,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             gap: 15px;
         `;
 
-        console.log('📸 Total captured photos:', capturedPhotos.length);
-        console.log('📸 Captured photos sample:', capturedPhotos.slice(0, 2));
+        console.log('Total captured photos:', capturedPhotos.length);
+        console.log('Captured photos sample:', capturedPhotos.slice(0, 2));
 
         if (capturedPhotos.length === 0) {
             const noPhotosMsg = document.createElement('div');
@@ -968,7 +990,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         capturedPhotos.forEach((photo, index) => {
-            console.log('📸 Processing photo', index + 1, 'for emotion:', photo.emotion);
+            console.log('Processing photo', index + 1, 'for emotion:', photo.emotion);
             const item = document.createElement('div');
             item.className = 'gallery-item';
             item.style.cssText = `
@@ -1042,21 +1064,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         conversationSection.appendChild(conversationTitle);
 
         // Fetch and display conversation history
-        console.log('🔍 Checking currentSessionId at gallery display:', currentSessionId);
+        console.log('Checking currentSessionId at gallery display:', currentSessionId);
         
         if (currentSessionId) {
-            console.log('📚 Fetching conversation history for session:', currentSessionId);
+            console.log('Fetching conversation history for session:', currentSessionId);
             
             // Check if this is a fallback session
             if (String(currentSessionId).startsWith('fallback_')) {
-                console.log('⚠️ Using fallback session, displaying local conversation history');
+                console.log('Using fallback session, displaying local conversation history');
                 
                 // Show local conversation history if available
-                console.log('📝 Local conversationHistory length:', conversationHistory ? conversationHistory.length : 'undefined');
-                console.log('📝 Local conversationHistory sample:', conversationHistory ? conversationHistory.slice(0, 2) : 'undefined');
+                console.log('Local conversationHistory length:', conversationHistory ? conversationHistory.length : 'undefined');
+                console.log('Local conversationHistory sample:', conversationHistory ? conversationHistory.slice(0, 2) : 'undefined');
                 
                 if (conversationHistory && conversationHistory.length > 0) {
-                    console.log('✅ Displaying local conversation history with', conversationHistory.length, 'messages');
+                    console.log('Displaying local conversation history with', conversationHistory.length, 'messages');
                     const conversationLog = document.createElement('div');
                     conversationLog.className = 'conversation-log';
                     conversationLog.style.cssText = `
@@ -1066,7 +1088,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     `;
 
                     conversationHistory.forEach((message, index) => {
-                        console.log('💬 Processing message', index + 1, ':', message);
+                        console.log('Processing message', index + 1, ':', message);
                         const messageDiv = document.createElement('div');
                         messageDiv.className = `message ${message.speaker}`;
                         messageDiv.style.cssText = `
@@ -1117,7 +1139,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     conversationSection.appendChild(conversationLog);
                 } else {
-                    console.warn('⚠️ Local conversation history is empty or undefined');
+                    console.warn('Local conversation history is empty or undefined');
                     const noLocalMsg = document.createElement('div');
                     noLocalMsg.style.cssText = 'color: #ffa726; text-align: center; padding: 20px;';
                     noLocalMsg.textContent = `Local conversation history is empty (${conversationHistory ? conversationHistory.length : 'undefined'} messages)`;
@@ -1129,13 +1151,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             try {
                 const response = await fetch(`http://localhost:3000/api/session-history?session_id=${currentSessionId}`);
-                console.log('📡 Conversation history API response status:', response.status);
+                console.log('Conversation history API response status:', response.status);
                 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('📝 Conversation history data:', data);
+                    console.log('Conversation history data:', data);
                     const messages = data.data.conversation_history;
-                    console.log('💬 Found', messages.length, 'conversation messages');
+                    console.log('Found', messages.length, 'conversation messages');
 
                     const conversationLog = document.createElement('div');
                     conversationLog.className = 'conversation-log';
@@ -1197,7 +1219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     conversationSection.appendChild(conversationLog);
                 } else {
                     const errorData = await response.json();
-                    console.error('❌ Failed to fetch conversation history:', response.status, errorData);
+                    console.error('Failed to fetch conversation history:', response.status, errorData);
                     
                     // Show error message in conversation section
                     const errorMsg = document.createElement('div');
@@ -1206,7 +1228,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     conversationSection.appendChild(errorMsg);
                 }
             } catch (error) {
-                console.error('❌ Error fetching conversation history:', error);
+                console.error('Error fetching conversation history:', error);
                 
                 // Show error message in conversation section
                 const errorMsg = document.createElement('div');
@@ -1215,7 +1237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 conversationSection.appendChild(errorMsg);
             }
         } else {
-            console.warn('⚠️ No session ID available for fetching conversation history');
+            console.warn('No session ID available for fetching conversation history');
             
             // Show no session message
             const noSessionMsg = document.createElement('div');
@@ -1229,10 +1251,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         galleryLayout.appendChild(conversationSection);
         container.appendChild(galleryLayout);
 
-        console.log('🎨 Setting gallery display to flex...');
+        console.log('Setting gallery display to flex...');
         gallery.style.display = 'flex';
-        console.log('🎨 Gallery display set. Current style:', gallery.style.display);
-        console.log('🎨 Gallery should now be visible!');
+        console.log('Gallery display set. Current style:', gallery.style.display);
+        console.log('Gallery should now be visible!');
     }
 
     /**
@@ -1397,21 +1419,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.addEventListener('keydown', (event) => {
         if (event.key === 's' || event.key === 'S') {
             if (GAME_MODE === "tutorial") {
-                console.log('⏩ Tutorial skip requested with S key');
+                console.log('Tutorial skip requested with S key');
                 
                 // Stop any scheduled next message first.
                 if (tutorialTimeoutId) {
-                    console.log('⏩ Clearing tutorial timeout:', tutorialTimeoutId);
+                    console.log('Clearing tutorial timeout:', tutorialTimeoutId);
                     clearTimeout(tutorialTimeoutId);
                     tutorialTimeoutId = null;
                 }
 
                 // Stop any TTS that is currently playing.
-                console.log('⏩ Stopping current TTS playback');
+                console.log('Stopping current TTS playback');
                 messagingSystem.stop();
 
                 // Immediately mark the tutorial as "finished" and start the game.
-                console.log('⏩ Marking tutorial as complete and starting game');
+                console.log('Marking tutorial as complete and starting game');
                 GAME_MODE = "game"; // Set mode to game immediately to prevent further tutorial messages
                 currentTutorialIndex = tutorialMessages.length;
                 
@@ -1420,7 +1442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 // Add a small delay to ensure TTS is fully stopped before starting game
                 setTimeout(() => {
-                    console.log('⏩ Starting game after tutorial skip');
+                    console.log('Starting game after tutorial skip');
                     runGame();
                 }, 100);
             }
@@ -1429,8 +1451,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Debug key for stuck emotions - press 'R' to reset current emotion state
         if (event.key === 'r' || event.key === 'R') {
             if (GAME_MODE === "game") {
-                console.log('🔄 MANUAL EMOTION RESET requested with R key');
-                console.log('🔄 Before reset:', {
+                console.log('MANUAL EMOTION RESET requested with R key');
+                console.log('Before reset:', {
                     targetEmotion,
                     targetEmotionSelected,
                     emotionHoldStartTime,
@@ -1446,25 +1468,25 @@ document.addEventListener('DOMContentLoaded', async () => {
                 // Stop any current TTS
                 messagingSystem.stop();
                 
-                console.log('🔄 After reset:', {
+                console.log('After reset:', {
                     targetEmotion,
                     targetEmotionSelected,
                     emotionHoldStartTime,
                     gameMode: GAME_MODE
                 });
                 
-                console.log('🔄 Manual reset complete - try expressing the emotion again');
+                console.log('Manual reset complete - try expressing the emotion again');
             }
         }
         
         // Debug mode toggle - press 'D' to enable/disable verbose debugging
         if (event.key === 'd' || event.key === 'D') {
             DEBUG_MODE = !DEBUG_MODE;
-            console.log(`🔧 DEBUG MODE ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}`);
+            console.log(`DEBUG MODE ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}`);
             if (DEBUG_MODE) {
-                console.log('🔧 Verbose debugging is now active (emotion detection, face detection health)');
+                console.log('Verbose debugging is now active (emotion detection, face detection health)');
             } else {
-                console.log('🔧 Verbose debugging disabled for better performance');
+                console.log('Verbose debugging disabled for better performance');
             }
         }
     });

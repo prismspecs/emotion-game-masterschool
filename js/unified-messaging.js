@@ -14,6 +14,7 @@ class UnifiedMessagingSystem {
         this.currentSentenceIndex = 0;
         this.currentTimeoutId = null; // To track display timeouts
         this.selectedVoiceName = 'auto'; // Default to auto-selection
+        this.cachedSelectedVoice = null; // Cache the selected voice
         
         this.initializeVoices();
         this.initializeMessageElement();
@@ -27,13 +28,13 @@ class UnifiedMessagingSystem {
 
         const populateVoices = () => {
             this.voices = speechSynthesis.getVoices();
-            console.log('🎤 Voices loaded:', this.voices.length, 'voices available');
+            console.log('Voices loaded:', this.voices.length, 'voices available');
             if (this.voices.length > 0) {
-                console.log('🎤 Available voices:', this.voices.map(v => `${v.name} (${v.lang})`));
-                // Log the selected voice for debugging
-                const selectedVoice = this.getSelectedVoice();
-                if (selectedVoice) {
-                    console.log('🎤 Auto-selected voice:', selectedVoice.name, '(' + selectedVoice.lang + ')');
+                console.log('Available voices:', this.voices.map(v => `${v.name} (${v.lang})`));
+                // Cache the selected voice for debugging
+                this.cachedSelectedVoice = this.getSelectedVoice();
+                if (this.cachedSelectedVoice) {
+                    console.log('Auto-selected voice:', this.cachedSelectedVoice.name, '(' + this.cachedSelectedVoice.lang + ')');
                 }
             }
         };
@@ -45,9 +46,13 @@ class UnifiedMessagingSystem {
         
         // Force voice loading for some browsers
         if (this.voices.length === 0) {
-            console.log('🎤 No voices loaded initially, waiting for voices...');
+            console.log('No voices loaded initially, waiting for voices...');
             setTimeout(() => {
                 populateVoices();
+                // Make sure to cache the voice after delayed loading
+                if (this.voices.length > 0 && !this.cachedSelectedVoice) {
+                    this.cachedSelectedVoice = this.getSelectedVoice();
+                }
             }, 100);
         }
     }
@@ -74,7 +79,7 @@ class UnifiedMessagingSystem {
         if (this.voices.length === 0) return null;
         
         const isChromeBrowser = this.isChrome();
-        console.log('🔍 Browser detection - Chrome:', isChromeBrowser);
+        console.log('Browser detection - Chrome:', isChromeBrowser);
         
         // For Chrome, prioritize en-GB English voices
         if (isChromeBrowser) {
@@ -85,7 +90,7 @@ class UnifiedMessagingSystem {
             ) || this.voices.find(voice => voice.lang === 'en-GB');
             
             if (gbVoice) {
-                console.log('🎤 Selected en-GB voice for Chrome:', gbVoice.name);
+                console.log('Selected en-GB voice for Chrome:', gbVoice.name);
                 return gbVoice;
             }
         }
@@ -164,10 +169,10 @@ class UnifiedMessagingSystem {
      * Play a single sentence with synchronized text
      */
     async playSentence(sentence) {
-        console.log('🎵 playSentence called with:', sentence);
+        console.log('playSentence called with:', sentence);
         
         if (typeof speechSynthesis === 'undefined') {
-            console.log('⚠️ Speech synthesis not available, using text-only fallback');
+            console.log('Speech synthesis not available, using text-only fallback');
             // Fallback to text-only display
             const estimatedDuration = this.estimateSpeechDuration(sentence);
             await this.displayText(sentence, estimatedDuration);
@@ -177,13 +182,11 @@ class UnifiedMessagingSystem {
         return new Promise((resolve, reject) => {
             const utterance = new SpeechSynthesisUtterance(sentence);
             
-            // Configure voice
-            const selectedVoice = this.getSelectedVoice();
-            if (selectedVoice) {
-                utterance.voice = selectedVoice;
-                console.log('🎤 Using voice:', selectedVoice.name);
+            // Configure voice (use cached voice to avoid repeated selection)
+            if (this.cachedSelectedVoice) {
+                utterance.voice = this.cachedSelectedVoice;
             } else {
-                console.log('⚠️ No voice selected, using default');
+                console.log('No voice cached, using default');
             }
             
             utterance.pitch = 0.5;
@@ -208,32 +211,32 @@ class UnifiedMessagingSystem {
             // Shorter timeout to detect if speech actually starts
             const speechStartTimeout = setTimeout(() => {
                 if (!speechStarted) {
-                    console.warn('🚨 Speech synthesis failed to start within 2 seconds for:', sentence.substring(0, 50));
-                    console.log('🔧 Attempting to fix by canceling and retrying...');
+                    console.warn('Speech synthesis failed to start within 2 seconds for:', sentence.substring(0, 50));
+                    console.log('Attempting to fix by canceling and retrying...');
                     speechSynthesis.cancel();
                     
                     // Try once more with a fresh utterance
                     const retryUtterance = new SpeechSynthesisUtterance(sentence);
-                    if (selectedVoice) {
-                        retryUtterance.voice = selectedVoice;
+                    if (this.cachedSelectedVoice) {
+                        retryUtterance.voice = this.cachedSelectedVoice;
                     }
                     retryUtterance.pitch = 0.5;
                     retryUtterance.rate = 0.9;
                     retryUtterance.volume = 1;
                     
                     retryUtterance.onstart = () => {
-                        console.log('🔄 Retry speech started:', sentence.substring(0, 50) + '...');
+                        console.log('Retry speech started:', sentence.substring(0, 50) + '...');
                         speechStarted = true;
                     };
                     
                     retryUtterance.onend = () => {
-                        console.log('🔄 Retry speech ended:', sentence.substring(0, 50) + '...');
+                        console.log('Retry speech ended:', sentence.substring(0, 50) + '...');
                         speechEnded = true;
                         checkCompletion();
                     };
                     
                     retryUtterance.onerror = (event) => {
-                        console.error('🔄 Retry speech synthesis error:', event);
+                        console.error('Retry speech synthesis error:', event);
                         speechEnded = true;
                         checkCompletion();
                     };
@@ -241,7 +244,7 @@ class UnifiedMessagingSystem {
                     // Final timeout for retry
                     setTimeout(() => {
                         if (!speechStarted) {
-                            console.warn('🚨 Retry also failed, marking speech as ended');
+                            console.warn('Retry also failed, marking speech as ended');
                             speechEnded = true;
                             checkCompletion();
                         }
@@ -256,7 +259,7 @@ class UnifiedMessagingSystem {
             const timeoutEstimatedDuration = this.estimateSpeechDuration(sentence, utterance.rate);
             const maxDuration = Math.max(timeoutEstimatedDuration * 2, 15000); // Increased to 15 seconds
             timeoutId = setTimeout(() => {
-                console.warn('⚠️ TTS timeout reached for sentence:', sentence.substring(0, 50));
+                console.warn('TTS timeout reached for sentence:', sentence.substring(0, 50));
                 speechEnded = true;
                 textEnded = true;
                 checkCompletion();
@@ -270,20 +273,20 @@ class UnifiedMessagingSystem {
             });
 
             utterance.onstart = () => {
-                console.log('🎤 Speech started:', sentence.substring(0, 50) + '...');
+                console.log('Speech started:', sentence.substring(0, 50) + '...');
                 speechStarted = true;
                 clearTimeout(speechStartTimeout);
             };
 
             utterance.onend = () => {
-                console.log('🎤 Speech ended:', sentence.substring(0, 50) + '...');
+                console.log('Speech ended:', sentence.substring(0, 50) + '...');
                 speechEnded = true;
                 checkCompletion();
             };
 
             utterance.onerror = (event) => {
-                console.error('🚨 Speech synthesis error:', event);
-                console.log('🔧 Error details:', {
+                console.error('Speech synthesis error:', event);
+                console.log('Error details:', {
                     error: event.error,
                     type: event.type,
                     charIndex: event.charIndex,
@@ -294,7 +297,7 @@ class UnifiedMessagingSystem {
             };
 
             // Debug: Check speechSynthesis state
-            console.log('🔍 SpeechSynthesis state:', {
+            console.log('SpeechSynthesis state:', {
                 speaking: speechSynthesis.speaking,
                 pending: speechSynthesis.pending,
                 paused: speechSynthesis.paused,
@@ -306,7 +309,7 @@ class UnifiedMessagingSystem {
             
             // Additional debug: Check if utterance was queued
             setTimeout(() => {
-                console.log('🔍 After speak() call - SpeechSynthesis state:', {
+                console.log('After speak() call - SpeechSynthesis state:', {
                     speaking: speechSynthesis.speaking,
                     pending: speechSynthesis.pending,
                     paused: speechSynthesis.paused
@@ -319,41 +322,41 @@ class UnifiedMessagingSystem {
      * Play a message broken into sentences
      */
     async playMessage(text, onComplete = null) {
-        console.log('🎵 playMessage called with:', text.substring(0, 50) + '...');
-        console.log('🎵 Current isPlaying state:', this.isPlaying);
+        console.log('playMessage called with:', text.substring(0, 50) + '...');
+        console.log('Current isPlaying state:', this.isPlaying);
         
         if (this.isPlaying) {
-            console.log('🛑 Stopping current playback...');
+            console.log('Stopping current playback...');
             this.stop(); // Stop any current playback
         }
 
         this.isPlaying = true;
         const sentences = this.splitIntoSentences(text);
-        console.log('🎵 Split into', sentences.length, 'sentences:', sentences);
+        console.log('Split into', sentences.length, 'sentences:', sentences);
         
         try {
             for (let i = 0; i < sentences.length; i++) {
                 if (!this.isPlaying) {
-                    console.log('🛑 Playback stopped, breaking loop at sentence', i);
+                    console.log('Playback stopped, breaking loop at sentence', i);
                     break; // Check if stopped
                 }
                 
                 const sentence = sentences[i];
-                console.log(`🎵 Playing sentence ${i + 1}/${sentences.length}: "${sentence}"`);
+                console.log(`Playing sentence ${i + 1}/${sentences.length}: "${sentence}"`);
                 await this.playSentence(sentence);
-                console.log(`✅ Sentence ${i + 1} completed`);
+                console.log(`Sentence ${i + 1} completed`);
                 
                 // Brief pause between sentences (except for the last one)
                 if (i < sentences.length - 1 && this.isPlaying) {
-                    console.log('⏸️ Brief pause between sentences...');
+                    console.log('Brief pause between sentences...');
                     await new Promise(resolve => setTimeout(resolve, 500));
                 }
             }
-            console.log('✅ All sentences completed');
+            console.log('All sentences completed');
         } catch (error) {
-            console.error('❌ Error playing message:', error);
+            console.error('Error playing message:', error);
         } finally {
-            console.log('🏁 playMessage finished, setting isPlaying to false');
+            console.log('playMessage finished, setting isPlaying to false');
             this.isPlaying = false;
             this.currentUtterance = null;
         }
@@ -368,23 +371,23 @@ class UnifiedMessagingSystem {
      * Stop current speech and clear text
      */
     stop() {
-        console.log('🛑 stop() called, current isPlaying:', this.isPlaying);
+        console.log('stop() called, current isPlaying:', this.isPlaying);
         this.isPlaying = false;
 
         // Clear any pending timeouts for text display
         if (this.currentTimeoutId) {
-            console.log('⏰ Clearing timeout:', this.currentTimeoutId);
+            console.log('Clearing timeout:', this.currentTimeoutId);
             clearTimeout(this.currentTimeoutId);
             this.currentTimeoutId = null;
         }
         
         if (typeof speechSynthesis !== 'undefined') {
-            console.log('🔇 Cancelling speech synthesis');
+            console.log('Cancelling speech synthesis');
             speechSynthesis.cancel();
         }
         
         this.currentUtterance = null;
-        console.log('🛑 stop() completed');
+        console.log('stop() completed');
         
         if (this.messagesElement) {
             this.messagesElement.style.opacity = '0';
@@ -420,7 +423,7 @@ class UnifiedMessagingSystem {
      * Prime the audio context (call on user interaction)
      */
     primeAudioContext() {
-        console.log('🔧 Priming audio context...');
+        console.log('Priming audio context...');
         if (typeof speechSynthesis !== 'undefined') {
             speechSynthesis.cancel();
             
@@ -430,18 +433,18 @@ class UnifiedMessagingSystem {
             testUtterance.rate = 10.0; // Very fast
             
             testUtterance.onstart = () => {
-                console.log('✅ TTS test successful - audio context primed');
+                console.log('TTS test successful - audio context primed');
             };
             
             testUtterance.onerror = (event) => {
-                console.error('❌ TTS test failed:', event);
+                console.error('TTS test failed:', event);
             };
             
             speechSynthesis.speak(testUtterance);
             
-            console.log('🔧 Audio context priming initiated');
+            console.log('Audio context priming initiated');
         } else {
-            console.warn('⚠️ Speech synthesis not available for priming');
+            console.warn('Speech synthesis not available for priming');
         }
     }
 
@@ -449,10 +452,10 @@ class UnifiedMessagingSystem {
      * Test if speech synthesis is working properly
      */
     async testSpeechSynthesis() {
-        console.log('🧪 Testing speech synthesis...');
+        console.log('Testing speech synthesis...');
         
         if (typeof speechSynthesis === 'undefined') {
-            console.log('❌ Speech synthesis not supported');
+            console.log('Speech synthesis not supported');
             return false;
         }
 
@@ -465,13 +468,13 @@ class UnifiedMessagingSystem {
             
             const timeout = setTimeout(() => {
                 if (!testPassed) {
-                    console.log('❌ Speech synthesis test timed out');
+                    console.log('Speech synthesis test timed out');
                     resolve(false);
                 }
             }, 1000);
             
             testUtterance.onstart = () => {
-                console.log('✅ Speech synthesis test passed');
+                console.log('Speech synthesis test passed');
                 testPassed = true;
                 clearTimeout(timeout);
                 resolve(true);
@@ -479,14 +482,14 @@ class UnifiedMessagingSystem {
             
             testUtterance.onend = () => {
                 if (!testPassed) {
-                    console.log('❌ Speech synthesis test failed - onend without onstart');
+                    console.log('Speech synthesis test failed - onend without onstart');
                     clearTimeout(timeout);
                     resolve(false);
                 }
             };
             
             testUtterance.onerror = (event) => {
-                console.error('❌ Speech synthesis test error:', event);
+                console.error('Speech synthesis test error:', event);
                 clearTimeout(timeout);
                 resolve(false);
             };
