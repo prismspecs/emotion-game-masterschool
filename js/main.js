@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log('📡 Session API response status:', response.status);
 
             if (!response.ok) {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
                 console.error('❌ Session creation failed:', errorData);
                 throw new Error(`Failed to create session: ${response.status}`);
             }
@@ -54,14 +54,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             const data = await response.json();
             currentSessionId = data.data.session_id;
             gameStartTime = new Date();
+            
             console.log('✅ Session created successfully:', {
                 sessionId: currentSessionId,
                 userName: userName,
                 welcomeMessage: data.data.welcome_message?.substring(0, 50) + '...'
             });
+            
+            // Verify that sessionId was actually set
+            if (!currentSessionId) {
+                console.error('❌ Session ID is null or undefined after successful API response:', data);
+                throw new Error('Session ID not returned from server');
+            }
+            
             return data.data.welcome_message;
         } catch (error) {
             console.error('❌ Failed to initialize session:', error);
+            // Set a fallback session ID so the game can continue with local logging
+            console.warn('⚠️ Creating fallback session for local operation');
+            currentSessionId = `fallback_${Date.now()}`;
+            gameStartTime = new Date();
             return null;
         }
     }
@@ -81,40 +93,47 @@ document.addEventListener('DOMContentLoaded', async () => {
             metadata
         });
 
-        try {
-            const response = await fetch('http://localhost:3000/api/conversation-message', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    session_id: currentSessionId,
-                    message_type: messageType,
-                    speaker: speaker,
-                    content: content,
-                    metadata: metadata
-                })
-            });
+        // Always store locally first, regardless of API success
+        const localMessage = {
+            timestamp: new Date().toISOString(),
+            messageType,
+            speaker,
+            content,
+            metadata
+        };
+        conversationHistory.push(localMessage);
+        console.log('💾 Stored message locally. Total messages:', conversationHistory.length);
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                console.error('❌ Failed to log conversation message:', errorData);
-                return;
+        // Try to send to server if not using fallback session
+        if (!String(currentSessionId).startsWith('fallback_')) {
+            try {
+                const response = await fetch('http://localhost:3000/api/conversation-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        message_type: messageType,
+                        speaker: speaker,
+                        content: content,
+                        metadata: metadata
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('❌ Failed to log conversation message to server:', errorData);
+                    return;
+                }
+
+                const result = await response.json();
+                console.log('✅ Message logged successfully to server:', result);
+            } catch (error) {
+                console.error('❌ Failed to log conversation message to server:', error);
             }
-
-            const result = await response.json();
-            console.log('✅ Message logged successfully:', result);
-
-            // Also store locally for immediate access
-            conversationHistory.push({
-                timestamp: new Date().toISOString(),
-                messageType,
-                speaker,
-                content,
-                metadata
-            });
-        } catch (error) {
-            console.error('❌ Failed to log conversation message:', error);
+        } else {
+            console.log('📝 Using fallback session - message stored locally only');
         }
     }
 
@@ -144,13 +163,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Enhanced messaging function that logs bot responses
     async function getOpenAIResponseWithLogging(prompt, maxTokens, messageType = 'bot_message') {
+        const requestSequence = getNextMessageSequence();
+        console.log(`🎯 Making OpenAI request with sequence ${requestSequence} for ${messageType}`);
+        
         const response = await getOpenAIResponse(prompt, maxTokens);
+        
+        // Check if this response is still valid (sequence hasn't been invalidated)
+        if (requestSequence < currentMessageSequence) {
+            console.log(`🚫 Discarding stale OpenAI response (sequence ${requestSequence} < current ${currentMessageSequence}) for ${messageType}`);
+            return null; // Discard stale response
+        }
         
         if (response) {
             await logConversationMessage(messageType, 'bot', response, {
                 prompt: prompt.substring(0, 200), // Store truncated prompt for context
                 response_length: response.length,
-                max_tokens: maxTokens
+                max_tokens: maxTokens,
+                sequence: requestSequence
             });
         }
 
@@ -222,6 +251,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const DETECTION_INTERVAL = 200; // ms
 
+    // Message sequence tracking to prevent stale messages
+    let currentMessageSequence = 0;
+    function getNextMessageSequence() {
+        return ++currentMessageSequence;
+    }
+    function invalidateCurrentSequence() {
+        console.log(`🔄 Invalidating message sequence ${currentMessageSequence}, moving to ${currentMessageSequence + 1}`);
+        currentMessageSequence++;
+        return currentMessageSequence;
+    }
+
     let tutorialMessages = [
         'Let me explain how this works.',
         'You will be asked to express specific emotions with your face.',
@@ -239,6 +279,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     let bypassIntro = false;
     let GAME_MODE = "tutorial";
+    let DEBUG_MODE = false; // Toggle with 'D' key for verbose debugging
 
     let lastCoachingTime = 0;
     const COACHING_INTERVAL = 8000; // ms
@@ -488,10 +529,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (detections && detections.length > 0) {
             lastDetections = detections; // Always update with the latest detection
             const emotions = detections[0].expressions;
+            
+            // Periodic detection health check (only in debug mode)
+            if (DEBUG_MODE && Math.random() < 0.05) { // 5% chance to log detection info when debugging
+                console.log(`👁️ DETECTION HEALTH: ${detections.length} faces detected, game mode: ${GAME_MODE}`);
+            }
 
             if (GAME_MODE == "game" && targetEmotion && !targetEmotionSelected) {
                 const matchPercentage = (emotions[targetEmotion] || 0) * 100;
                 matchPercentageSpan.textContent = `${matchPercentage.toFixed(2)}%`;
+
+                // Add periodic debugging for stuck emotions (only in debug mode)
+                if (DEBUG_MODE && Math.random() < 0.1) { // 10% chance to log debug info when debugging
+                    console.log(`🎭 EMOTION DEBUG: target="${targetEmotion}", match=${matchPercentage.toFixed(1)}%, selected=${targetEmotionSelected}, holdStart=${emotionHoldStartTime}`);
+                    console.log(`🎭 All emotions:`, Object.keys(emotions).map(e => `${e}:${(emotions[e]*100).toFixed(1)}%`).join(', '));
+                }
 
                 // Check if matchPercentage is above the threshold
                 if (matchPercentage >= EMOTION_THRESHOLD) {
@@ -526,10 +578,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                             const confidence = lastDetections[0].expressions[targetEmotion] * 100;
                             await logPlayerAttempt(targetEmotion, dominantEmotion, confidence, attemptDurationMs);
 
-                            const prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
-                            const congratsMessage = await getOpenAIResponseWithLogging(prompt, 40, 'success_message');
+                            let prompt;
+                            const willBeLastEmotion = emotionsCompleted + 1 >= EMOTIONS_PER_GAME;
+                            
+                            if (willBeLastEmotion) {
+                                // Final challenge completion message
+                                prompt = `The player has just completed their FINAL emotion challenge "${targetEmotion}" in ${timeToAchieve.toFixed(1)} seconds, mastering all required emotions. Give a dramatic, triumphant message acknowledging their complete victory. Under 25 words.`;
+                            } else {
+                                // Regular challenge completion message
+                                prompt = `The player just succeeded at expressing "${targetEmotion}". Give a short, excited, congratulatory message for mastering it in ${timeToAchieve.toFixed(1)} seconds. Do NOT mention what is next. Keep it under 20 words.`;
+                            }
+                            
+                                        const congratsMessage = await getOpenAIResponseWithLogging(prompt, 40, 'success_message');
 
-                            await messagingSystem.playMessage(congratsMessage || `Well done!`);
+            // Only play if we got a valid (non-stale) response
+            if (congratsMessage) {
+                await messagingSystem.playMessage(congratsMessage);
+            } else {
+                console.log('⏩ Using fallback success message due to stale/missing response');
+                await messagingSystem.playMessage('Well done!');
+            }
 
                             emotionsCompleted++;
                             usedEmotions.push(targetEmotion);
@@ -561,16 +629,33 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const dominantEmotion = Object.keys(expressions).reduce((a, b) => expressions[a] > expressions[b] ? a : b);
 
                         let prompt;
-                        if (dominantEmotion !== targetEmotion) {
-                            prompt = `The player is trying to show "${targetEmotion}", but their expression is reading as "${dominantEmotion}". Give them a short, cryptic, and darkly humorous tip (under 25 words) to help them adjust their face.`;
+                        const isLastChallenge = emotionsCompleted === EMOTIONS_PER_GAME - 1;
+                        
+                        if (isLastChallenge) {
+                            // Special prompts for the final challenge
+                            if (dominantEmotion !== targetEmotion) {
+                                prompt = `This is the final test. The player is attempting "${targetEmotion}" but showing "${dominantEmotion}". Give them a dramatic, intense final warning to correct their expression. Under 25 words.`;
+                            } else {
+                                prompt = `This is the final challenge. The player is showing "${targetEmotion}" but needs more intensity to complete their ultimate test. Give them a climactic, urgent push. Under 15 words.`;
+                            }
                         } else {
-                            prompt = `The player is on the right track showing "${targetEmotion}", but they need to make the expression stronger. Give them a very short, menacing, and cryptic tip (under 15 words) to intensify it.`;
+                            // Regular coaching prompts
+                            if (dominantEmotion !== targetEmotion) {
+                                prompt = `The player is trying to show "${targetEmotion}", but their expression is reading as "${dominantEmotion}". Give them a short, cryptic, and darkly humorous tip (under 25 words) to help them adjust their face.`;
+                            } else {
+                                prompt = `The player is on the right track showing "${targetEmotion}", but they need to make the expression stronger. Give them a very short, menacing, and cryptic tip (under 15 words) to intensify it.`;
+                            }
                         }
 
                         const coachingMessage = await getOpenAIResponseWithLogging(prompt, 50, 'coaching_message');
 
-                        if (coachingMessage) {
+                        // Only play coaching message if it's valid and game is still active
+                        if (coachingMessage && GAME_MODE === "game") {
                             await messagingSystem.playMessage(coachingMessage);
+                        } else if (!coachingMessage) {
+                            console.log('⏩ Skipping coaching message due to stale/missing response');
+                        } else {
+                            console.log('⏩ Skipping coaching message - game mode changed');
                         }
 
                         isCoachingActive = false;
@@ -595,9 +680,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         matchPercentageSpan.textContent = '0%';
         feedbackMessage.textContent = '';
         targetEmotionSelected = false;
+        emotionHoldStartTime = null; // Reset hold timer
         emotionAttemptStartTime = performance.now();
         lastCoachingTime = performance.now(); // Reset coaching timer for a grace period
         readout.style.display = 'block';
+        
+        console.log(`🔧 STATE RESET: targetEmotion="${targetEmotion}", targetEmotionSelected=${targetEmotionSelected}, emotionHoldStartTime=${emotionHoldStartTime}`);
 
         // Announce the new emotion
         let announcementPrompt;
@@ -607,7 +695,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             announcementPrompt = `Now, challenge the player to express the emotion: "${targetEmotion}". Keep the message short, engaging, and under 15 words. For example: "Your next challenge: ${targetEmotion}!"`;
         }
         const announcementMessage = await getOpenAIResponseWithLogging(announcementPrompt, 30, 'challenge_announcement');
-        await messagingSystem.playMessage(announcementMessage || `Now try: ${targetEmotion}`);
+        
+        // Only play if we got a valid (non-stale) response
+        if (announcementMessage) {
+            await messagingSystem.playMessage(announcementMessage);
+        } else {
+            console.log('⏩ Using fallback announcement message due to stale/missing response');
+            await messagingSystem.playMessage(`Now try: ${targetEmotion}`);
+        }
 
         // Ensure this call doesn't cause issues if updateEmotions is now async.
         updateEmotions(currentResizedDetections);
@@ -664,6 +759,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const greeting = await initializeSession(userName);
 
         if (greeting) {
+            console.log('✅ Session initialized successfully, currentSessionId:', currentSessionId);
             // Log and play greeting message
             await logConversationMessage('welcome_message', 'bot', greeting, {
                 user_name: userName,
@@ -671,6 +767,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             await messagingSystem.playMessage(greeting);
         } else {
+            console.warn('⚠️ Session initialization failed, currentSessionId:', currentSessionId);
             // Fallback if greeting fails
             const fallbackGreeting = `Welcome to the Emotion Game, ${userName}!`;
             await logConversationMessage('welcome_message', 'bot', fallbackGreeting, {
@@ -692,8 +789,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Show tutorial messages one by one using the unified messaging system
     async function showNextMessage() {
+        // Check if tutorial was skipped (game mode changed)
+        if (GAME_MODE !== "tutorial") {
+            console.log('⏩ Tutorial was skipped, stopping showNextMessage');
+            return;
+        }
+
         if (currentTutorialIndex >= tutorialMessages.length) {
             // All messages are done, or the tutorial was skipped. Start the game.
+            console.log('📚 Tutorial completed naturally, starting game');
             runGame();
             return;
         }
@@ -701,21 +805,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentMessage = tutorialMessages[currentTutorialIndex];
         currentTutorialIndex++;
 
+        console.log(`📚 Playing tutorial message ${currentTutorialIndex}/${tutorialMessages.length}: ${currentMessage.substring(0, 30)}...`);
+
         // Log tutorial message
         await logConversationMessage('tutorial_message', 'bot', currentMessage, {
             tutorial_step: currentTutorialIndex,
             total_steps: tutorialMessages.length
         });
 
-        await messagingSystem.playMessage(currentMessage);
-
-        // After the message has played, check if we should continue or start the game.
-        if (currentTutorialIndex < tutorialMessages.length) {
-            tutorialTimeoutId = setTimeout(showNextMessage, 1000);
+        // Only play if tutorial is still active (not skipped)
+        if (GAME_MODE === "tutorial") {
+            await messagingSystem.playMessage(currentMessage);
         } else {
-            // We've finished the last message.
+            console.log('⏩ Skipping tutorial message playback - tutorial was skipped');
+            return;
+        }
+
+        // After the message has played, check if tutorial is still active and we should continue
+        if (GAME_MODE === "tutorial" && currentTutorialIndex < tutorialMessages.length) {
+            console.log(`📚 Scheduling next tutorial message in 1 second`);
+            tutorialTimeoutId = setTimeout(showNextMessage, 1000);
+        } else if (GAME_MODE === "tutorial") {
+            // We've finished the last message and tutorial is still active
+            console.log('📚 Tutorial completed, starting game');
             runGame();
         }
+        // If GAME_MODE is no longer "tutorial", we were skipped and should do nothing
     }
 
     function runTutorial() {
@@ -755,23 +870,55 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
-        await messagingSystem.playMessage(endMessage || 'The game is over. You have survived.');
+        // Only play if we got a valid (non-stale) response and game is still ending
+        if (endMessage && GAME_MODE === "end") {
+            await messagingSystem.playMessage(endMessage);
+        } else if (GAME_MODE === "end") {
+            console.log('⏩ Using fallback end message due to stale/missing response');
+            await messagingSystem.playMessage('The game is over. You have survived.');
+        } else {
+            console.log('⏩ Skipping end message - game mode changed');
+        }
 
         // Fade the screen to black after the final message
         setTimeout(() => {
+            console.log('🎬 Starting fade to black...');
             const fadeOverlay = document.getElementById('fadeOverlay');
+            console.log('🎬 fadeOverlay element:', fadeOverlay);
             if (fadeOverlay) {
+                console.log('🎬 Applying fade transition...');
                 fadeOverlay.style.transition = 'opacity 2s ease-in-out';
                 fadeOverlay.style.opacity = '1';
                 // After fade is complete, show the gallery
-                setTimeout(showPhotoGallery, 2000);
+                console.log('🎬 Scheduling gallery display in 2 seconds...');
+                setTimeout(() => {
+                    console.log('🎬 About to show photo gallery...');
+                    showPhotoGallery();
+                }, 2000);
+            } else {
+                console.error('❌ fadeOverlay element not found, showing gallery directly');
+                showPhotoGallery();
             }
         }, 2000);
     }
 
     async function showPhotoGallery() {
+        console.log('🎨 showPhotoGallery() called');
         const gallery = document.getElementById('photoGallery');
         const container = document.getElementById('galleryContainer');
+        console.log('🎨 Gallery element:', gallery);
+        console.log('🎨 Container element:', container);
+        
+        if (!gallery) {
+            console.error('❌ photoGallery element not found!');
+            return;
+        }
+        
+        if (!container) {
+            console.error('❌ galleryContainer element not found!');
+            return;
+        }
+        
         container.innerHTML = ''; // Clear previous items
 
         // Create main gallery layout
@@ -810,7 +957,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             gap: 15px;
         `;
 
-        capturedPhotos.forEach(photo => {
+        console.log('📸 Total captured photos:', capturedPhotos.length);
+        console.log('📸 Captured photos sample:', capturedPhotos.slice(0, 2));
+
+        if (capturedPhotos.length === 0) {
+            const noPhotosMsg = document.createElement('div');
+            noPhotosMsg.style.cssText = 'color: #ffa726; text-align: center; padding: 20px;';
+            noPhotosMsg.textContent = 'No photos were captured during the game';
+            photoGrid.appendChild(noPhotosMsg);
+        }
+
+        capturedPhotos.forEach((photo, index) => {
+            console.log('📸 Processing photo', index + 1, 'for emotion:', photo.emotion);
             const item = document.createElement('div');
             item.className = 'gallery-item';
             item.style.cssText = `
@@ -884,8 +1042,91 @@ document.addEventListener('DOMContentLoaded', async () => {
         conversationSection.appendChild(conversationTitle);
 
         // Fetch and display conversation history
+        console.log('🔍 Checking currentSessionId at gallery display:', currentSessionId);
+        
         if (currentSessionId) {
             console.log('📚 Fetching conversation history for session:', currentSessionId);
+            
+            // Check if this is a fallback session
+            if (String(currentSessionId).startsWith('fallback_')) {
+                console.log('⚠️ Using fallback session, displaying local conversation history');
+                
+                // Show local conversation history if available
+                console.log('📝 Local conversationHistory length:', conversationHistory ? conversationHistory.length : 'undefined');
+                console.log('📝 Local conversationHistory sample:', conversationHistory ? conversationHistory.slice(0, 2) : 'undefined');
+                
+                if (conversationHistory && conversationHistory.length > 0) {
+                    console.log('✅ Displaying local conversation history with', conversationHistory.length, 'messages');
+                    const conversationLog = document.createElement('div');
+                    conversationLog.className = 'conversation-log';
+                    conversationLog.style.cssText = `
+                        display: flex;
+                        flex-direction: column;
+                        gap: 10px;
+                    `;
+
+                    conversationHistory.forEach((message, index) => {
+                        console.log('💬 Processing message', index + 1, ':', message);
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `message ${message.speaker}`;
+                        messageDiv.style.cssText = `
+                            padding: 10px;
+                            border-radius: 8px;
+                            margin-bottom: 8px;
+                            ${message.speaker === 'bot' ? 
+                                'background: #2d5a87; margin-right: 20px;' : 
+                                'background: #4a4a4a; margin-left: 20px;'
+                            }
+                        `;
+
+                        const header = document.createElement('div');
+                        header.style.cssText = `
+                            font-size: 12px;
+                            color: #ccc;
+                            margin-bottom: 5px;
+                        `;
+                        
+                        const timestamp = new Date(message.timestamp).toLocaleTimeString();
+                        const messageTypeLabel = (message.messageType || 'unknown').replace('_', ' ').toUpperCase();
+                        header.textContent = `${message.speaker.toUpperCase()} - ${messageTypeLabel} (${timestamp})`;
+
+                        const content = document.createElement('div');
+                        content.style.cssText = `
+                            color: #fff;
+                            line-height: 1.4;
+                        `;
+                        content.textContent = message.content;
+
+                        // Add timing info for player attempts
+                        if (message.metadata && message.metadata.timing) {
+                            const timingInfo = document.createElement('div');
+                            timingInfo.style.cssText = `
+                                font-size: 11px;
+                                color: #999;
+                                margin-top: 5px;
+                            `;
+                            const duration = (message.metadata.timing.attempt_duration / 1000).toFixed(1);
+                            timingInfo.textContent = `Duration: ${duration}s`;
+                            messageDiv.appendChild(timingInfo);
+                        }
+
+                        messageDiv.appendChild(header);
+                        messageDiv.appendChild(content);
+                        conversationLog.appendChild(messageDiv);
+                    });
+
+                    conversationSection.appendChild(conversationLog);
+                } else {
+                    console.warn('⚠️ Local conversation history is empty or undefined');
+                    const noLocalMsg = document.createElement('div');
+                    noLocalMsg.style.cssText = 'color: #ffa726; text-align: center; padding: 20px;';
+                    noLocalMsg.textContent = `Local conversation history is empty (${conversationHistory ? conversationHistory.length : 'undefined'} messages)`;
+                    conversationSection.appendChild(noLocalMsg);
+                }
+                
+                return; // Skip the server API call
+            }
+            
             try {
                 const response = await fetch(`http://localhost:3000/api/session-history?session_id=${currentSessionId}`);
                 console.log('📡 Conversation history API response status:', response.status);
@@ -988,7 +1229,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         galleryLayout.appendChild(conversationSection);
         container.appendChild(galleryLayout);
 
+        console.log('🎨 Setting gallery display to flex...');
         gallery.style.display = 'flex';
+        console.log('🎨 Gallery display set. Current style:', gallery.style.display);
+        console.log('🎨 Gallery should now be visible!');
     }
 
     /**
@@ -1149,22 +1393,78 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log(`Stored photo for ${targetEmotion}`);
     }
 
-    // Event listener for skipping tutorial lines
+    // Event listener for skipping tutorial lines and debugging
     document.addEventListener('keydown', (event) => {
         if (event.key === 's' || event.key === 'S') {
             if (GAME_MODE === "tutorial") {
+                console.log('⏩ Tutorial skip requested with S key');
+                
                 // Stop any scheduled next message first.
                 if (tutorialTimeoutId) {
+                    console.log('⏩ Clearing tutorial timeout:', tutorialTimeoutId);
                     clearTimeout(tutorialTimeoutId);
                     tutorialTimeoutId = null;
                 }
 
                 // Stop any TTS that is currently playing.
-                messagingSystem.clearMessage();
+                console.log('⏩ Stopping current TTS playback');
+                messagingSystem.stop();
 
                 // Immediately mark the tutorial as "finished" and start the game.
+                console.log('⏩ Marking tutorial as complete and starting game');
+                GAME_MODE = "game"; // Set mode to game immediately to prevent further tutorial messages
                 currentTutorialIndex = tutorialMessages.length;
-                runGame();
+                
+                // Invalidate current message sequence to prevent stale messages
+                invalidateCurrentSequence();
+                
+                // Add a small delay to ensure TTS is fully stopped before starting game
+                setTimeout(() => {
+                    console.log('⏩ Starting game after tutorial skip');
+                    runGame();
+                }, 100);
+            }
+        }
+        
+        // Debug key for stuck emotions - press 'R' to reset current emotion state
+        if (event.key === 'r' || event.key === 'R') {
+            if (GAME_MODE === "game") {
+                console.log('🔄 MANUAL EMOTION RESET requested with R key');
+                console.log('🔄 Before reset:', {
+                    targetEmotion,
+                    targetEmotionSelected,
+                    emotionHoldStartTime,
+                    gameMode: GAME_MODE
+                });
+                
+                // Reset emotion detection state
+                targetEmotionSelected = false;
+                emotionHoldStartTime = null;
+                emotionAttemptStartTime = performance.now();
+                lastCoachingTime = performance.now();
+                
+                // Stop any current TTS
+                messagingSystem.stop();
+                
+                console.log('🔄 After reset:', {
+                    targetEmotion,
+                    targetEmotionSelected,
+                    emotionHoldStartTime,
+                    gameMode: GAME_MODE
+                });
+                
+                console.log('🔄 Manual reset complete - try expressing the emotion again');
+            }
+        }
+        
+        // Debug mode toggle - press 'D' to enable/disable verbose debugging
+        if (event.key === 'd' || event.key === 'D') {
+            DEBUG_MODE = !DEBUG_MODE;
+            console.log(`🔧 DEBUG MODE ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}`);
+            if (DEBUG_MODE) {
+                console.log('🔧 Verbose debugging is now active (emotion detection, face detection health)');
+            } else {
+                console.log('🔧 Verbose debugging disabled for better performance');
             }
         }
     });
